@@ -17,7 +17,7 @@ export class LobbyScene extends Phaser.Scene {
     this.view = d.witch;
     this.bg = this.add.tileSprite(W / 2, H / 2, W, H, 'bg_0');
     this.add.tileSprite(W / 2, H / 2, W, H, 'bg_cloudlayer').setAlpha(0.35).setName('cl');
-    this.add.rectangle(W / 2, H / 2, W, H, 0x0E0830, 0.45);
+    this.add.rectangle(W / 2, H / 2, W, H, 0x0E0830, 0.58);
     this.add.image(W / 2, H / 2, 'bg_vignette').setDisplaySize(W, H).setAlpha(0.8);
     this.cameras.main.fadeIn(300, 10, 6, 30);
     audio.music('bgm_lobby', this);
@@ -40,22 +40,21 @@ export class LobbyScene extends Phaser.Scene {
     this.title = txt(this, W / 2, 210, '', 44, '#FFE8A8');
     this.name = txt(this, W / 2, 270, '', 80, '#FFFFFF');
     // 뒤에서 천천히 도는 빛줄기 + 은은한 후광 + 속성 입자
-    this.rays = this.add.image(W / 2, cy - 20, 'rays').setScale(2.2).setAlpha(0.35).setBlendMode('ADD');
+    this.rays = this.add.image(W / 2, cy - 20, 'rays').setScale(2.2).setAlpha(0.18).setBlendMode('ADD');
     this.tweens.add({ targets: this.rays, angle: 360, duration: 40000, repeat: -1 });
-    this.glow = this.add.image(W / 2, cy - 20, 'glow').setScale(6).setAlpha(0.4).setBlendMode('ADD');
-    this.tweens.add({ targets: this.glow, alpha: 0.25, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.glow = this.add.image(W / 2, cy - 20, 'glow').setScale(6).setAlpha(0.16).setBlendMode('ADD');
+    this.tweens.add({ targets: this.glow, alpha: 0.08, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     this.stageFx = this.add.particles(W / 2, cy, 'spark', { x: { min: -330, max: 330 }, y: { min: -260, max: 260 }, speedY: { min: -60, max: -20 }, lifespan: 2200, scale: { start: 0.5, end: 0 }, alpha: { start: 0.9, end: 0 }, frequency: 90, blendMode: 'ADD' });
     this.witch = this.add.sprite(W / 2, cy + 60, 'witch_luna_0');
     wind(this.witch, 1, 0.012);
-    if (this.witch.preFX) this.shine = this.witch.preFX.addShine(0.5, 0.25, 5);
     this.lock = this.add.image(W / 2, cy, 'ico_lock').setScale(1.2).setVisible(false);
     this.catL = this.add.image(W / 2 - 290, cy + 140, 'cat_cheese');
     this.catR = this.add.image(W / 2 + 290, cy + 140, 'cat_cheese').setFlipX(true);
     this.tweens.add({ targets: this.witch, y: cy + 46, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    this.tweens.add({ targets: [this.catL], y: cy + 120, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
-    this.tweens.add({ targets: [this.catR], y: cy + 120, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 500 });
+    // 고양이: 둥실 + 가끔 장난(깡충·한 바퀴·갸웃), 누르면 야옹 하고 깡충
+    [this.catL, this.catR].forEach((c, i) => { c.trick = null; c.idleT = 1.5 + i * 2; c.side = i ? 1 : -1; });
     [this.catL, this.catR].forEach(c => wind(c, 2, 0.025));
-    [this.catL, this.catR].forEach(c => c.setInteractive({ useHandCursor: true }).on('pointerup', () => this.catsPopup()));
+    [this.catL, this.catR].forEach(c => c.setInteractive({ useHandCursor: true }).on('pointerup', () => { if (c.trick) return this.catsPopup(); c.trick = 'hop'; c.trickT = 0; audio.play('sfx_meow', { volume: 0.6 }); }));
     iconButton(this, 90, cy + 260, 'ico_back', () => this.switchWitch(-1), 110);
     iconButton(this, W - 90, cy + 260, 'ico_next', () => this.switchWitch(1), 110);
 
@@ -95,7 +94,25 @@ export class LobbyScene extends Phaser.Scene {
     window.__lobby = this;
   }
 
-  update(t, dms) { this.bg.tilePositionY -= dms * 0.03; this.children.getByName('cl').tilePositionY -= dms * 0.06; }
+  update(t, dms) {
+    const dt = dms / 1000, ts = t / 1000;
+    [this.catL, this.catR].forEach((c, i) => {
+      if (!c.base) return;
+      c.idleT -= dt;
+      if (c.idleT <= 0 && !c.trick) { c.idleT = 2.5 + Math.random() * 3; c.trick = ['hop', 'spin', 'tilt'][Math.floor(Math.random() * 3)]; c.trickT = 0; }
+      let oy = 0, a = 0, sx = 1;
+      if (c.trick) {
+        c.trickT += dt; const k = c.trickT / 0.6;
+        if (k >= 1) c.trick = null;
+        else if (c.trick === 'hop') { oy = -Math.sin(k * Math.PI) * 60; sx = 1 + Math.sin(k * Math.PI * 2) * 0.08; }
+        else if (c.trick === 'spin') sx = Math.cos(k * Math.PI * 2);
+        else a = Math.sin(k * Math.PI) * 16 * -c.side;
+      }
+      const br = Math.sin(ts * 4 + i * 2) * 0.03;
+      c.y = this.stageY + 130 + Math.sin(ts * 2.6 + i * 1.6) * 14 + oy;
+      c.setAngle(Math.sin(ts * 1.6 + i) * 4 + a).setScale(c.base * (1 + br) * sx * (c.side > 0 ? -1 : 1), c.base * (1 - br)).setFlipX(false);
+    });
+    this.bg.tilePositionY -= dms * 0.03; this.children.getByName('cl').tilePositionY -= dms * 0.06; }
 
   refresh() {
     const d = load(), id = this.view, info = M.WITCH_INFO[id], lv = d.witches[id] || 0;
@@ -109,7 +126,7 @@ export class LobbyScene extends Phaser.Scene {
     this.stageFx.setParticleTint(E.tints[0]); this.stageFx.setTexture?.(E.tex);
     this.desc.setText(info.desc);
     const eq = d.equip;
-    [this.catL, this.catR].forEach((c, i) => { c.setVisible(!!eq[i]); if (eq[i]) fit(c.setTexture(`cat_${eq[i]}`), 190); });
+    [this.catL, this.catR].forEach((c, i) => { c.setVisible(!!eq[i]); if (eq[i]) { fit(c.setTexture(`cat_${eq[i]}`), 200); c.base = c.scaleY; } });
     fit(this.witch, 560);
     if (lv) {
       const atk = Math.round((1 + 0.12 * (lv - 1)) * 100);
@@ -185,52 +202,56 @@ export class LobbyScene extends Phaser.Scene {
   }
 
   // ── 고양이 ────────────────────────────────────────────
+  // 팝업 안 내용은 draw() 로 그 자리에서 다시 그림 (닫았다 열지 않음)
   catsPopup() {
     const ph = Math.min(H - 160, 1640);
     const pop = popup(this, '고양이 친구들', ph, { onClose: () => this.refresh() });
-    const b = pop.box, d = load();
-    // 산책
-    const wy = -ph / 2 + 150;
-    if (d.walk.cat) {
-      const left = M.walkLeft();
-      b.add(fit(this.add.image(-360, wy, `cat_${d.walk.cat}`), 80));
-      b.add(txt(this, -280, wy - 20, `${M.CAT_INFO[d.walk.cat].name} 산책 중`, 38, '#FFFFFF', { ox: 0 }));
-      const t = txt(this, -280, wy + 26, left ? `${Math.ceil(left / 60000)}분 남음` : '돌아왔어요!', 32, '#FFE8A8', { ox: 0 });
-      b.add(t);
-      b.add(button(this, 270, wy, left ? '바로 받기 5' : '보상 받기', () => {
-        const r = M.finishWalk(true);
-        if (r) { audio.play('sfx_meow'); toast(this, rewardText(r), '#FFE14D'); pop.close(); this.time.delayedCall(200, () => this.catsPopup()); }
-        else toast(this, '별가루가 부족해요');
-      }, { key: left ? 'btn_purple' : 'btn_gold', w: 330, h: 110, size: 36, icon: left ? 'cur_gem' : null }));
-    } else b.add(txt(this, 0, wy, '장착하지 않은 고양이를 산책 보내면 30분 뒤 코인·간식을 가져와요', 32, '#D8CCFF', { wrap: 820 }));
-
-    const area = scrollArea(this, b, 0, -ph / 2 + 240, 900, ph - 290);
-    const cw = 290, chh = 420;
-    M.CAT_ORDER.forEach((id, i) => {
-      const x = -cw + (i % 3) * cw, y = Math.floor(i / 3) * (chh + 20) + chh / 2;
-      const c = this.add.container(x, y);
-      const lv = d.cats[id] || 0, info = M.CAT_INFO[id], role = CATS[id].role;
-      const eq = d.equip.includes(id), target = d.adopt === id;
-      c.add(this.add.nineslice(0, 0, 'card', null, cw - 14, chh, 50, 50, 50, 50).setTint(eq ? 0xFFE8A8 : target ? 0xFFC0E0 : 0xFFFFFF));
-      c.add(fit(this.add.image(0, -90, `cat_${id}`), 210).setTint(lv ? 0xFFFFFF : 0x3A2E60));
-      c.add(txt(this, 0, 30, info.name, 38, '#FFFFFF'));
-      c.add(txt(this, 0, 72, `${M.ROLE_NAME[role]} · ${lv ? `Lv.${lv}` : `🐾 ${d.paws[id] || 0}/${info.paws}`}`, 28, lv ? '#FFE8A8' : '#D8CCFF'));
-      if (eq) c.add(txt(this, -cw / 2 + 50, -chh / 2 + 34, '장착', 28, '#FFE14D'));
-      if (d.walk.cat === id) c.add(txt(this, -cw / 2 + 60, -chh / 2 + 34, '산책', 28, '#9AE8FF'));
-      if (lv) c.add(button(this, 0, 150, '보기', () => this.catDetail(id, pop), { key: 'btn_purple', w: 220, h: 90, size: 34 }));
-      else if (M.canAdopt(id)) c.add(button(this, 0, 150, '입양!', () => { M.adopt(id); audio.play('sfx_meow'); toast(this, `${info.name}이(가) 가족이 되었어요!`, '#FFE14D'); pop.close(); this.time.delayedCall(250, () => this.catsPopup()); }, { key: 'btn_gold', w: 220, h: 90, size: 36 }));
-      else if (target) c.add(txt(this, 0, 150, '입양 목표', 32, '#FF9EC4'));
-      else c.add(button(this, 0, 150, '목표로', () => { M.setAdopt(id); pop.close(); this.time.delayedCall(200, () => this.catsPopup()); }, { key: 'btn_pink', w: 220, h: 90, size: 34 }));
-      area.add(c);
+    let scrollY = null;
+    const draw = () => pop.redraw(b => {
+      const d = load();
+      const wy = -ph / 2 + 150;
+      if (d.walk.cat) {
+        const left = M.walkLeft();
+        b.add(fit(this.add.image(-360, wy, `cat_${d.walk.cat}`), 80));
+        b.add(txt(this, -280, wy - 20, `${M.CAT_INFO[d.walk.cat].name} 산책 중`, 38, '#FFFFFF', { ox: 0 }));
+        b.add(txt(this, -280, wy + 26, left ? `${Math.ceil(left / 60000)}분 남음` : '돌아왔어요!', 32, '#FFE8A8', { ox: 0 }));
+        b.add(button(this, 270, wy, left ? '바로 받기 5' : '보상 받기', () => {
+          const r = M.finishWalk(true);
+          if (r) { audio.play('sfx_meow'); toast(this, rewardText(r), '#FFE14D'); this.bar.refresh(); redraw(); }
+          else toast(this, '별가루가 부족해요');
+        }, { key: left ? 'btn_purple' : 'btn_gold', w: 330, h: 110, size: 36, icon: left ? 'cur_gem' : null }));
+      } else b.add(txt(this, 0, wy, '장착하지 않은 고양이를 산책 보내면 30분 뒤 코인·간식을 가져와요', 32, '#D8CCFF', { wrap: 820 }));
+      const area = scrollArea(this, pop.box, 0, -ph / 2 + 240, 900, ph - 290, b);
+      const cw = 290, chh = 420;
+      M.CAT_ORDER.forEach((id, i) => {
+        const x = -cw + (i % 3) * cw, y = Math.floor(i / 3) * (chh + 20) + chh / 2;
+        const c = this.add.container(x, y);
+        const lv = d.cats[id] || 0, info = M.CAT_INFO[id], role = CATS[id].role;
+        const eq = d.equip.includes(id), target = d.adopt === id;
+        c.add(this.add.nineslice(0, 0, 'card', null, cw - 14, chh, 50, 50, 50, 50).setTint(eq ? 0xFFE8A8 : target ? 0xFFC0E0 : 0xFFFFFF));
+        c.add(fit(this.add.image(0, -90, `cat_${id}`), 210).setTint(lv ? 0xFFFFFF : 0x3A2E60));
+        c.add(txt(this, 0, 30, info.name, 38, '#FFFFFF'));
+        c.add(txt(this, 0, 72, `${M.ROLE_NAME[role]} · ${lv ? `Lv.${lv}` : `🐾 ${d.paws[id] || 0}/${info.paws}`}`, 28, lv ? '#FFE8A8' : '#D8CCFF'));
+        if (eq) c.add(txt(this, -cw / 2 + 50, -chh / 2 + 34, '장착', 28, '#FFE14D'));
+        if (d.walk.cat === id) c.add(txt(this, -cw / 2 + 60, -chh / 2 + 34, '산책', 28, '#9AE8FF'));
+        if (lv) c.add(button(this, 0, 150, '보기', () => this.catDetail(id, redraw), { key: 'btn_purple', w: 220, h: 90, size: 34 }));
+        else if (M.canAdopt(id)) c.add(button(this, 0, 150, '입양!', () => { M.adopt(id); audio.play('sfx_meow'); toast(this, `${info.name}이(가) 가족이 되었어요!`, '#FFE14D'); redraw(); }, { key: 'btn_gold', w: 220, h: 90, size: 36 }));
+        else if (target) c.add(txt(this, 0, 150, '입양 목표', 32, '#FF9EC4'));
+        else c.add(button(this, 0, 150, '목표로', () => { M.setAdopt(id); audio.play('sfx_click', { volume: 0.5 }); redraw(); }, { key: 'btn_pink', w: 220, h: 90, size: 34 }));
+        area.add(c);
+      });
+      area.contentH = Math.ceil(M.CAT_ORDER.length / 3) * (chh + 20) + 20;
+      if (scrollY !== null) area.setScroll(scrollY);
+      pop.area = area;
     });
-    area.contentH = Math.ceil(M.CAT_ORDER.length / 3) * (chh + 20) + 20;
+    // 스크롤 위치를 유지한 채 다시 그림
+    const redraw = () => { scrollY = pop.area ? pop.area.y : null; draw(); this.refresh(); };
+    draw();
   }
 
-  catDetail(id, parent) {
-    const pop = popup(this, M.CAT_INFO[id].name, 1100, { depth: 1100, onClose: () => { parent.close(); this.time.delayedCall(200, () => this.catsPopup()); } });
-    const b = pop.box;
-    const draw = () => {
-      b.list.slice(4).forEach(o => o.destroy());
+  catDetail(id, redrawParent) {
+    const pop = popup(this, M.CAT_INFO[id].name, 1100, { depth: 1100, onClose: () => redrawParent() });
+    const draw = () => pop.redraw(b => {
       const d = load(), lv = d.cats[id], cost = M.catUpCost(lv), role = CATS[id].role;
       b.add(fit(this.add.image(0, -280, `cat_${id}`), 330));
       b.add(txt(this, 0, -80, `Lv.${lv}  ·  ${M.ROLE_NAME[role]}`, 50, '#FFE8A8'));
@@ -243,76 +264,83 @@ export class LobbyScene extends Phaser.Scene {
       b.add(txt(this, 0, 20, eff, 36, '#FFFFFF', { wrap: 760 }));
       const eq = d.equip.includes(id);
       b.add(button(this, -200, 220, eq ? '빼기' : '장착', () => { M.toggleEquip(id); audio.play('sfx_meow', { volume: 0.5 }); draw(); }, { key: eq ? 'btn_purple' : 'btn_pink', w: 300, h: 120, size: 40 }));
-      const walkOk = !eq && !d.walk.cat;
       const wb = button(this, 200, 220, '산책 보내기', () => { if (M.startWalk(id)) { toast(this, '30분 뒤에 돌아와요'); draw(); } }, { key: 'btn_purple', w: 320, h: 120, size: 36 });
-      wb.setEnabled(walkOk); b.add(wb);
+      wb.setEnabled(!eq && !d.walk.cat); b.add(wb);
       if (lv < M.CAT_MAX) {
         const ub = button(this, 0, 380, `성장  🍪${cost.treats} · ${fmt(cost.coins)}`, () => { if (M.upgradeCat(id)) { audio.play('sfx_upgrade'); draw(); this.bar.refresh(); } else toast(this, '간식이나 코인이 부족해요'); }, { key: 'btn_gold', w: 620, h: 140, size: 40 });
         ub.setEnabled(d.treats >= cost.treats && d.coins >= cost.coins); b.add(ub);
       } else b.add(txt(this, 0, 380, '최대 레벨!', 50, '#FFE14D'));
-    };
+    });
     draw();
   }
 
   // ── 미션 / 출석 / 업적 / 랭킹 / 상점 / 설정 ───────────────
   missionsPopup() {
     const pop = popup(this, '오늘의 미션', 1060, { onClose: () => this.refresh() });
-    const b = pop.box;
-    M.missions().forEach((m, i) => {
-      const y = -300 + i * 250;
-      b.add(this.add.nineslice(0, y, 'card', null, 860, 220, 50, 50, 50, 50));
-      b.add(txt(this, -380, y - 50, m.text, 40, '#FFFFFF', { ox: 0 }));
-      const prog = m.kind === 'runDist' ? Math.min(m.goal, m.prog) : Math.min(m.goal, m.prog);
-      b.add(this.add.rectangle(-380, y + 20, 440, 30, 0x120830).setOrigin(0, 0.5).setStrokeStyle(3, 0x8A6AD8));
-      b.add(this.add.rectangle(-376, y + 20, Math.max(4, 432 * prog / m.goal), 22, 0x9AFFB8).setOrigin(0, 0.5));
-      b.add(txt(this, -380, y + 70, `${fmt(prog)} / ${fmt(m.goal)} · 보상 ${rewardText(m.reward)}`, 30, '#D8CCFF', { ox: 0 }));
-      if (m.claimed) b.add(txt(this, 280, y, '받음 ✔', 44, '#9AFFB8'));
-      else {
-        const bt = button(this, 280, y, '받기', () => { const r = M.claimMission(m.id); if (r) { audio.play('sfx_mission'); toast(this, rewardText(r), '#FFE14D'); pop.close(); this.refresh(); } }, { key: 'btn_gold', w: 230, h: 110, size: 40 });
-        bt.setEnabled(m.done); b.add(bt);
-      }
+    const draw = () => pop.redraw(b => {
+      M.missions().forEach((m, i) => {
+        const y = -300 + i * 250;
+        b.add(this.add.nineslice(0, y, 'card', null, 860, 220, 50, 50, 50, 50).setTint(m.claimed ? 0x9088B0 : 0xFFFFFF));
+        b.add(txt(this, -380, y - 50, m.text, 40, '#FFFFFF', { ox: 0 }));
+        const prog = Math.min(m.goal, m.prog);
+        b.add(this.add.rectangle(-380, y + 20, 440, 30, 0x120830).setOrigin(0, 0.5).setStrokeStyle(3, 0x8A6AD8));
+        b.add(this.add.rectangle(-376, y + 20, Math.max(4, 432 * prog / m.goal), 22, 0x9AFFB8).setOrigin(0, 0.5));
+        b.add(txt(this, -380, y + 70, `${fmt(prog)} / ${fmt(m.goal)} · 보상 ${rewardText(m.reward)}`, 30, '#D8CCFF', { ox: 0 }));
+        if (m.claimed) b.add(txt(this, 280, y, '받음 ✔', 44, '#9AFFB8'));
+        else {
+          const bt = button(this, 280, y, '받기', () => { const r = M.claimMission(m.id); if (r) { audio.play('sfx_mission'); toast(this, rewardText(r), '#FFE14D'); this.bar.refresh(); draw(); } }, { key: 'btn_gold', w: 230, h: 110, size: 40 });
+          bt.setEnabled(m.done); b.add(bt);
+        }
+      });
+      b.add(txt(this, 0, 450, '미션은 매일 자정에 바뀌어요', 32, '#B8A6F0'));
     });
-    b.add(txt(this, 0, 450, '미션은 매일 자정에 바뀌어요', 32, '#B8A6F0'));
+    draw();
   }
 
   dailyPopup() {
-    const st = M.dailyState();
     const pop = popup(this, '출석 선물', 1000, { onClose: () => this.refresh() });
-    const b = pop.box;
     const ICON = { coins: 'cur_coin', gems: 'cur_gem', treats: 'cur_treat', crystals: 'cur_crystal' };
-    M.DAILY.forEach((r, i) => {
-      const big = i === 6;
-      const x = big ? 0 : -300 + (i % 3) * 300, y = big ? 230 : -260 + Math.floor(i / 3) * 230;
-      const [k, v] = Object.entries(r)[0];
-      const got = i < st.day || (i === st.day && !st.can);
-      const today = i === st.day && st.can;
-      b.add(this.add.nineslice(x, y, 'card', null, big ? 860 : 270, 210, 50, 50, 50, 50).setTint(today ? 0xFFE8A8 : got ? 0x8070A0 : 0xFFFFFF));
-      b.add(txt(this, x, y - 70, `${i + 1}일`, 32, '#FFFFFF'));
-      b.add(this.add.image(x, y, ICON[k]).setDisplaySize(90, 90).setAlpha(got ? 0.5 : 1));
-      b.add(txt(this, x, y + 70, fmt(v), 36, '#FFE14D'));
-      if (got) b.add(this.add.image(x + 70, y - 50, 'ico_check').setDisplaySize(70, 70));
+    const draw = () => pop.redraw(b => {
+      const st = M.dailyState();
+      M.DAILY.forEach((r, i) => {
+        const big = i === 6;
+        const x = big ? 0 : -300 + (i % 3) * 300, y = big ? 230 : -260 + Math.floor(i / 3) * 230;
+        const [k, v] = Object.entries(r)[0];
+        const got = i < st.day || (i === st.day - 1 && !st.can) || (st.day === 0 && !st.can && i === 6);
+        const today = i === st.day && st.can;
+        b.add(this.add.nineslice(x, y, 'card', null, big ? 860 : 270, 210, 50, 50, 50, 50).setTint(today ? 0xFFE8A8 : got ? 0x8070A0 : 0xFFFFFF));
+        b.add(txt(this, x, y - 70, `${i + 1}일`, 32, '#FFFFFF'));
+        b.add(this.add.image(x, y, ICON[k]).setDisplaySize(90, 90).setAlpha(got ? 0.5 : 1));
+        b.add(txt(this, x, y + 70, fmt(v), 36, '#FFE14D'));
+        if (got) b.add(this.add.image(x + 70, y - 50, 'ico_check').setDisplaySize(70, 70));
+      });
+      const bt = button(this, 0, 410, st.can ? '선물 받기' : '내일 또 만나요', () => { const r = M.claimDaily(); if (r) { audio.play('sfx_mission'); toast(this, rewardText(r), '#FFE14D'); this.bar.refresh(); draw(); } }, { key: 'btn_gold', w: 500, h: 140 });
+      bt.setEnabled(st.can); b.add(bt);
     });
-    const bt = button(this, 0, 410, st.can ? '선물 받기' : '내일 또 만나요', () => { const r = M.claimDaily(); if (r) { audio.play('sfx_mission'); toast(this, rewardText(r), '#FFE14D'); pop.close(); } }, { key: 'btn_gold', w: 500, h: 140 });
-    bt.setEnabled(st.can); b.add(bt);
+    draw();
   }
 
   achPopup() {
     const ph = Math.min(H - 200, 1500);
     const pop = popup(this, '업적', ph, { onClose: () => this.refresh() });
-    const b = pop.box;
-    const area = scrollArea(this, b, 0, -ph / 2 + 120, 900, ph - 170);
-    M.ACHIEVEMENTS.forEach((a, i) => {
-      const st = M.achState(a), y = i * 210 + 100;
-      area.add(this.add.nineslice(0, y, 'card', null, 860, 190, 50, 50, 50, 50));
-      area.add(this.add.image(-350, y, 'ico_trophy').setDisplaySize(100, 100).setTint(st.done ? 0xFFE14D : 0xFFFFFF));
-      area.add(txt(this, -280, y - 40, st.done ? `${a.text.replace('{g}', fmt(a.goals[a.goals.length - 1]))} 완료` : st.text, 38, '#FFFFFF', { ox: 0 }));
-      area.add(txt(this, -280, y + 30, `${'★'.repeat(st.tier)}${'☆'.repeat(a.goals.length - st.tier)}  ${fmt(Math.min(st.val, st.goal))}/${fmt(st.goal)}`, 32, '#FFE8A8', { ox: 0 }));
-      if (!st.done) {
-        const bt = button(this, 320, y, `${st.reward}`, () => { const g = M.claimAch(a.id); if (g) { audio.play('sfx_mission'); toast(this, `별가루 ${g}`, '#FFE14D'); pop.close(); this.time.delayedCall(220, () => this.achPopup()); } }, { key: 'btn_gold', w: 200, h: 100, size: 38, icon: 'cur_gem' });
-        bt.setEnabled(st.ready); area.add(bt);
-      }
+    let scrollY = null;
+    const draw = () => pop.redraw(b => {
+      const area = scrollArea(this, pop.box, 0, -ph / 2 + 120, 900, ph - 170, b);
+      M.ACHIEVEMENTS.forEach((a, i) => {
+        const st = M.achState(a), y = i * 210 + 100;
+        area.add(this.add.nineslice(0, y, 'card', null, 860, 190, 50, 50, 50, 50));
+        area.add(this.add.image(-350, y, 'ico_trophy').setDisplaySize(100, 100).setTint(st.done ? 0xFFE14D : 0xFFFFFF));
+        area.add(txt(this, -280, y - 40, st.done ? `${a.text.replace('{g}', fmt(a.goals[a.goals.length - 1]))} 완료` : st.text, 38, '#FFFFFF', { ox: 0 }));
+        area.add(txt(this, -280, y + 30, `${'★'.repeat(st.tier)}${'☆'.repeat(a.goals.length - st.tier)}  ${fmt(Math.min(st.val, st.goal))}/${fmt(st.goal)}`, 32, '#FFE8A8', { ox: 0 }));
+        if (!st.done) {
+          const bt = button(this, 320, y, `${st.reward}`, () => { const g = M.claimAch(a.id); if (g) { audio.play('sfx_mission'); toast(this, `별가루 ${g}`, '#FFE14D'); this.bar.refresh(); scrollY = area.y; draw(); } }, { key: 'btn_gold', w: 200, h: 100, size: 38, icon: 'cur_gem' });
+          bt.setEnabled(st.ready); area.add(bt);
+        }
+      });
+      area.contentH = M.ACHIEVEMENTS.length * 210 + 20;
+      if (scrollY !== null) area.setScroll(scrollY);
     });
-    area.contentH = M.ACHIEVEMENTS.length * 210 + 20;
+    draw();
   }
 
   rankPopup() {

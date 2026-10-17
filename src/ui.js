@@ -12,6 +12,7 @@ export function txt(scene, x, y, s, size = 48, color = '#FFFFFF', o = {}) {
     fontFamily: FONT, fontSize: `${size}px`, color, align: o.align || 'center',
     stroke: o.stroke ?? INK, strokeThickness: o.thick ?? Math.max(4, Math.round(size * 0.16)),
     wordWrap: o.wrap ? { width: o.wrap, useAdvancedWrap: true } : undefined, lineSpacing: o.lineSpacing ?? 4,
+    resolution: 2,
   }).setOrigin(o.ox ?? 0.5, o.oy ?? 0.5);
   if (o.shadow !== false) t.setShadow(0, Math.round(size * 0.08), '#120830', 0, true, false);
   return t;
@@ -99,6 +100,11 @@ export function popup(scene, title, ph = 1200, o = {}) {
     box.add(scene.add.image(0, -ph / 2 + 10, 'ribbon').setDisplaySize(Math.min(pw + 60, 900), 190));
     box.add(txt(scene, 0, -ph / 2 + 2, title, 62, '#FFFFFF', { stroke: '#22105A', thick: 12 }));
   }
+  // 내용은 이 상자에 담음 → 보상을 받아도 팝업을 닫지 않고 내용만 다시 그림 (깜빡임 없음)
+  const content = scene.add.container(0, 0);
+  box.add(content);
+  root.content = content;
+  root.redraw = fn => { content.removeAll(true); fn(content); };
   const close = () => {
     if (root.closing) return; root.closing = true;
     scene.tweens.add({ targets: box, scale: 0.85, alpha: 0, duration: 140, onComplete: () => { root.destroy(); o.onClose && o.onClose(); } });
@@ -128,13 +134,14 @@ export function rewardText(r) {
 }
 
 // 아래로 미는 목록 (팝업 안): 마스크 + 드래그 스크롤. box = 팝업 상자 (크기 1 기준으로 마스크 계산)
-export function scrollArea(scene, box, x, y, w, h) {
+export function scrollArea(scene, box, x, y, w, h, parent = box) {
   const inner = scene.add.container(x, y);
-  box.add(inner);
+  parent.add(inner);
   const g = scene.make.graphics({ add: false });
   g.fillStyle(0xffffff).fillRect(box.x + x - w / 2, box.y + y, w, h);
   inner.setMask(g.createGeometryMask());
   inner.contentH = 0;
+  inner.setScroll = v => { inner.y = clamp(v); };
   let startY = null, base = 0;
   const top = box.y + y, inside = p => p.y > top && p.y < top + h && Math.abs(p.x - (box.x + x)) < w / 2;
   const clamp = v => Math.max(y + Math.min(0, h - inner.contentH), Math.min(y, v));

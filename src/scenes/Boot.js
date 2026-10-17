@@ -12,7 +12,7 @@ export class BootScene extends Phaser.Scene {
     this.load.on('progress', v => { bar.width = 600 * v; });
     this.load.json('manifest', 'assets/manifest.json');
     this.load.once('filecomplete-json-manifest', (k, t, m) => {
-      for (const n of m.images) this.load.image(n, `assets/img/${n}.png`);
+      for (const n of m.images) { const [k, ext] = Array.isArray(n) ? n : [n, 'png']; this.load.image(k, `assets/img/${k}.${ext}`); }
       for (const [n, s] of Object.entries(m.sheets)) this.load.spritesheet(n, `assets/fx/${n}.png`, { frameWidth: s.frameWidth, frameHeight: s.frameHeight });
       for (const n of SFX) this.load.audio(n, [`assets/audio/${n}.m4a`]);
       this.load.audio('bgm_title', ['assets/audio/bgm_title.m4a']);

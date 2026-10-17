@@ -57,7 +57,7 @@ export class PlayScene extends Phaser.Scene {
     this.makePlayer(cats);
     this.makeHud();
     this.makeInput();
-    this.add.image(W / 2, H / 2, 'bg_vignette').setDisplaySize(W, H).setDepth(80).setAlpha(0.7);
+    this.add.image(W / 2, H / 2, 'bg_vignette').setDisplaySize(W, H).setDepth(4).setAlpha(0.75);
     audio.music('bgm_run', this);
     this.cameras.main.fadeIn(300, 10, 6, 30);
     this.showBanner(ZONES[this.s.zone % 5], `${this.s.zone + 1} 구역`, 0xB89AFF);
@@ -104,6 +104,7 @@ export class PlayScene extends Phaser.Scene {
     this.trail = this.add.particles(0, 0, E.tex, { speedY: { min: 260, max: 420 }, speedX: { min: -60, max: 60 }, lifespan: 700, scale: { start: 0.55, end: 0 }, alpha: { start: 0.9, end: 0 }, rotate: { min: 0, max: 360 }, frequency: 22, tint: E.tints, blendMode: 'ADD' });
     // 몸 주위를 감도는 오라 입자
     this.aura = this.add.particles(0, 0, E.tex, { x: { min: -90, max: 90 }, y: { min: -120, max: 120 }, speedY: { min: 40, max: 120 }, lifespan: 900, scale: { start: 0.35, end: 0 }, alpha: { start: 0.8, end: 0 }, frequency: 70, tint: E.tints, blendMode: 'ADD' });
+    this.streak = this.add.particles(0, 0, 'glow', { x: { min: -140, max: 140 }, y: { min: -160, max: 160 }, speedY: { min: 500, max: 800 }, lifespan: 260, scaleX: 0.08, scaleY: { start: 1.6, end: 0.4 }, alpha: { start: 0.55, end: 0 }, frequency: 18, tint: 0xFFFFFF, blendMode: 'ADD', emitting: false });
     this.backGlow = this.add.image(0, 0, 'glow').setScale(4.2, 5).setTint(E.color).setAlpha(0.28).setBlendMode('ADD');
     const key = `witch_${s.witch}_0`;
     this.witch = this.add.image(0, 0, key);
@@ -119,7 +120,7 @@ export class PlayScene extends Phaser.Scene {
     this.catSprites = s.cats.map(c => { const sp = fit(this.add.image(0, 0, `cat_${c.id}`), 140); sp.base = sp.scale; sp.jump = 0; wind(sp, 2, 0.03); return sp; });
     this.catSparks = this.add.particles(0, 0, 'spark', { lifespan: 700, speed: { min: 20, max: 80 }, scale: { start: 0.3, end: 0 }, alpha: { start: 0.9, end: 0 }, tint: [0xFFE8F4, 0xFFF6A8, 0xD8C2FF], blendMode: 'ADD', emitting: false });
     this.catCircles = s.cats.map(() => this.add.image(0, 0, 'circle').setScale(0.5).setAlpha(0).setTint(0xFF9EC4).setBlendMode('ADD'));
-    L.player.add([this.backGlow, this.dashFx, this.trail, this.aura, ...this.catCircles, ...this.catSprites, this.catSparks, this.witch, this.tipGlow, this.tipStar, this.shieldImg]);
+    L.player.add([this.streak, this.backGlow, this.dashFx, this.trail, this.aura, ...this.catCircles, this.witch, ...this.catSprites, this.catSparks, this.tipGlow, this.tipStar, this.shieldImg]);
     this.tilt = 0; this.lastX = s.player.x;
   }
 
@@ -208,16 +209,24 @@ export class PlayScene extends Phaser.Scene {
     this.speedLines.emitting = s.items.dash > 0;
     // 마녀 + 고양이
     const vx = (p.x - this.lastX) / Math.max(dt, 1e-3); this.lastX = p.x;
-    this.tilt += (Phaser.Math.Clamp(vx * 0.012, -14, 14) - this.tilt) * Math.min(1, dt * 10);
+    // 좌우 이동 반응: 몸 기울기 · 옆으로 쏠림 · 망토/머리카락이 반대로 끌림 · 바람 자국
+    this.vn = (this.vn || 0) + (Phaser.Math.Clamp(vx / 1400, -1, 1) - (this.vn || 0)) * Math.min(1, dt * 8);
+    const vn = this.vn;
+    this.tilt += (vn * 18 - this.tilt) * Math.min(1, dt * 12);
+    if (this.witch.wind) this.witch.wind.vel = -vn * 0.9;
+    this.streak.emitting = Math.abs(vn) > 0.25 && !this.over;
+    this.streak.speedX = -vn * 900;
     const bob = Math.sin(t * 3) * 6;
     // 지팡이 끝이 탄 나가는 자리(p.x, p.y-70)에 오도록 그림 위치를 맞춤
     const ws = this.witchScale, ww = this.witch.width * ws, wh = this.witch.height * ws;
-    const breath = Math.sin(t * 6) * 0.012;
-    if (!this.over) this.witch.setPosition(p.x - (this.tip.x - 0.5) * ww, p.y - 70 - (this.tip.y - 0.5) * wh + bob).setAngle(this.tilt).setScale(ws * (1 + breath), ws * (1 - breath));
+    const breath = Math.sin(t * 6) * 0.012, bank = Math.abs(this.vn) * 0.08;
+    if (!this.over) this.witch.setPosition(p.x - (this.tip.x - 0.5) * ww + this.vn * 12, p.y - 70 - (this.tip.y - 0.5) * wh + bob - Math.abs(this.vn) * 10).setAngle(this.tilt).setScale(ws * (1 + breath - bank), ws * (1 - breath + bank * 0.4));
     this.witch.setAlpha(p.inv > 0 && s.status === 'play' ? (Math.floor(t * 14) % 2 ? 0.4 : 1) : 1);
     const wx = this.witch.x, wy = this.witch.y;
     this.backGlow.setPosition(wx, wy).setAlpha(0.22 + Math.sin(t * 3) * 0.06).setVisible(!this.over);
-    this.trail.setPosition(wx, wy + wh * 0.42); this.trail.emitting = !this.over;
+    this.trail.setPosition(wx - this.vn * 40, wy + wh * 0.42); this.trail.emitting = !this.over;
+    this.trail.speedX = { min: -60 - this.vn * 300, max: 60 - this.vn * 300 };
+    this.streak.setPosition(wx, wy);
     this.aura.setPosition(wx, wy); this.aura.emitting = !this.over;
     this.flash = Math.max(0, this.flash - dt * 9);
     const tx = p.x, ty = p.y - 70 + bob;
@@ -227,11 +236,29 @@ export class PlayScene extends Phaser.Scene {
     this.dashFx.setPosition(p.x, p.y + 10);
     s.cats.forEach((c, i) => {
       const sp = this.catSprites[i];
-      sp.x += (Phaser.Math.Clamp(wx + c.side * (ww * 0.42 + 70), 70, W - 70) - sp.x) * Math.min(1, dt * 9);
+      // 스프링처럼 마녀를 따라옴 → 늦게 따라오며 기울고 늘어남
+      const tx = Phaser.Math.Clamp(wx + c.side * (ww * 0.42 + 70), 70, W - 70);
+      sp.vx = (sp.vx || 0) + ((tx - sp.x) * 70 - (sp.vx || 0) * 11) * dt;
+      sp.x += sp.vx * dt;
+      const cv = Phaser.Math.Clamp(sp.vx / 1200, -1, 1);
+      if (sp.wind) sp.wind.vel = -cv;
+      // 가끔 혼자 장난: 깡충 · 한 바퀴 · 갸웃
+      sp.idleT = (sp.idleT ?? 2 + i * 1.7) - dt;
+      if (sp.idleT <= 0) { sp.idleT = 3 + Math.random() * 4; sp.trick = ['hop', 'spin', 'tilt'][Math.floor(Math.random() * 3)]; sp.trickT = 0; }
+      let ty = 0, ta = 0, tsx = 1;
+      if (sp.trick) {
+        sp.trickT += dt; const k = sp.trickT / 0.6;
+        if (k >= 1) sp.trick = null;
+        else if (sp.trick === 'hop') ty = -Math.sin(k * Math.PI) * 40;
+        else if (sp.trick === 'spin') tsx = Math.cos(k * Math.PI * 2);
+        else ta = Math.sin(k * Math.PI) * 18 * (c.side > 0 ? -1 : 1);
+      }
       sp.jump = Math.max(0, sp.jump - dt * 4);
-      const j = Math.sin(sp.jump * Math.PI);
-      sp.y = wy + wh * 0.18 + Math.sin(t * 4 + i * 2) * 10 - j * 26;
-      sp.setScale(sp.base * (1 + j * 0.08 + Math.sin(t * 5 + i) * 0.015), sp.base * (1 - j * 0.06 - Math.sin(t * 5 + i) * 0.015)).setFlipX(c.side > 0).setAngle(Math.sin(t * 2 + i) * 4 - c.side * j * 8);
+      const j = Math.sin(sp.jump * Math.PI), br = Math.sin(t * 5 + i) * 0.035;
+      sp.y = wy + wh * 0.18 + Math.sin(t * 4 + i * 2) * 12 - j * 30 + ty;
+      const flip = c.side > 0 ? -1 : 1;
+      sp.setScale(sp.base * (1 + j * 0.1 + br - Math.abs(cv) * 0.06) * tsx * flip, sp.base * (1 - j * 0.08 - br + Math.abs(cv) * 0.05)).setFlipX(false)
+        .setAngle(cv * 20 + Math.sin(t * 2 + i) * 4 - c.side * j * 10 + ta);
       const cc = this.catCircles[i]; cc.setPosition(sp.x, sp.y + 40).setAlpha(j * 0.8).setAngle(t * 90).setScale(0.45 + j * 0.2, (0.45 + j * 0.2) * 0.4);
       sp.setVisible(!this.over || sp.alpha > 0);
     });

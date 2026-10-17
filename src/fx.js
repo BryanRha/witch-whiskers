@@ -9,6 +9,7 @@ uniform float uTime;
 uniform float uAmp;
 uniform float uMode;
 uniform vec4 uBounds;
+uniform float uVel;
 varying vec2 outTexCoord;
 void main() {
   vec2 uv = outTexCoord;
@@ -21,16 +22,24 @@ void main() {
   if (uMode < 0.5) {                     // 비행(뒷모습): 망토·머리카락 펄럭임, 지팡이·빗자루 고정
     w = smoothstep(0.15, 0.85, side) * smoothstep(0.12, 0.3, l.y) * (1.0 - smoothstep(0.72, 0.9, l.y));
     w += 0.35 * (1.0 - smoothstep(0.0, 0.45, side)) * smoothstep(0.2, 0.32, l.y) * (1.0 - smoothstep(0.5, 0.62, l.y));
-    d.x = sin(l.y * 15.0 - uTime * 9.0 + l.x * 4.0) * w;
-    d.y = sin(l.x * 11.0 - uTime * 7.0) * 0.6 * w;
+    float sp = 1.0 + abs(uVel) * 1.5;   // 빨리 움직일수록 더 세게 펄럭
+    d.x = sin(l.y * 15.0 - uTime * 9.0 * sp + l.x * 4.0) * w * sp;
+    d.y = sin(l.x * 11.0 - uTime * 7.0 * sp) * 0.6 * w;
+    // 움직이는 반대쪽으로 망토·머리카락이 끌려감 (아래쪽일수록 더 많이)
+    float drag = smoothstep(0.15, 0.85, l.y) * (0.4 + 0.6 * smoothstep(0.0, 0.7, side));
+    d.x += uVel * drag * 2.2;
   } else if (uMode < 1.5) {              // 초상화: 머리카락·망토 끝이 천천히 살랑
     w = smoothstep(0.35, 1.0, side) * smoothstep(0.25, 0.65, l.y);
     d.x = sin(l.y * 6.0 - uTime * 2.2) * w;
     d.y = sin(l.x * 5.0 - uTime * 1.7) * 0.3 * w;
+  } else if (uMode > 2.5) {              // 몬스터: 날개(양옆) 퍼덕
+    w = smoothstep(0.35, 1.0, side) * (1.0 - smoothstep(0.85, 1.0, l.y));
+    d.y = sin(uTime * 12.0) * w;
+    d.x = cos(uTime * 12.0) * w * 0.3 * sign(l.x - 0.5);
   } else {                               // 고양이: 꼬리·털 끝 살랑, 구름 일렁임
     w = smoothstep(0.3, 0.95, side) * smoothstep(0.2, 0.55, l.y) * (1.0 - smoothstep(0.75, 0.92, l.y));
     float cloud = smoothstep(0.78, 0.95, l.y);
-    d.x = sin(uTime * 3.2 + l.y * 5.0) * w + sin(uTime * 2.0 + l.x * 9.0) * 0.4 * cloud;
+    d.x = sin(uTime * 3.2 + l.y * 5.0) * w + sin(uTime * 2.0 + l.x * 9.0) * 0.4 * cloud + uVel * w * 1.5;
     d.y = sin(uTime * 2.4 + l.x * 7.0) * 0.5 * cloud;
   }
   vec2 s = uv - d * uAmp * size * vec2(1.0, -1.0);
@@ -38,7 +47,7 @@ void main() {
 }`;
 
 export class WindFX extends Phaser.Renderer.WebGL.Pipelines.PostFXPipeline {
-  constructor(game) { super({ game, name: 'WindFX', fragShader: FRAG }); this.amp = 0.02; this.mode = 0; this.phase = Math.random() * 10; }
+  constructor(game) { super({ game, name: 'WindFX', fragShader: FRAG }); this.amp = 0.02; this.mode = 0; this.vel = 0; this.phase = Math.random() * 10; }
   onDraw(target) {
     const o = this.gameObject, r = this.renderer;
     const b = o.getBounds();
@@ -48,6 +57,7 @@ export class WindFX extends Phaser.Renderer.WebGL.Pipelines.PostFXPipeline {
     this.set1f('uTime', this.game.loop.time / 1000 + this.phase);
     this.set1f('uAmp', this.amp);
     this.set1f('uMode', this.mode);
+    this.set1f('uVel', this.vel);
     this.set4f('uBounds', x0, y0, x1, y1);
     this.bindAndDraw(target);
   }
@@ -60,7 +70,7 @@ export function wind(obj, mode, amp) {
   obj.setPostPipeline(WindFX);
   const p = obj.getPostPipeline(WindFX);
   const one = Array.isArray(p) ? p[p.length - 1] : p;
-  if (one) { one.mode = mode; one.amp = amp; }
+  if (one) { one.mode = mode; one.amp = amp; obj.wind = one; }
   return obj;
 }
 
