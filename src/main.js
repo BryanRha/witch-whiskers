@@ -5,6 +5,7 @@ import { TitleScene } from './scenes/Title.js';
 import { LobbyScene } from './scenes/Lobby.js';
 import { PlayScene } from './scenes/Play.js';
 import { ResultScene } from './scenes/Result.js';
+import { WindFX } from './fx.js';
 
 async function start() {
   try { await document.fonts.load('48px Jua'); } catch { /* 기본 폰트 */ }
@@ -19,6 +20,7 @@ async function start() {
     render: { antialias: true, roundPixels: false, powerPreference: 'high-performance' },
     input: { activePointers: 2 },
     fps: { target: 60 },
+    pipeline: { WindFX },
     scene: [BootScene, TitleScene, LobbyScene, PlayScene, ResultScene],
   });
   audio.attach(game);

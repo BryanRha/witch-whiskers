@@ -3,6 +3,8 @@ import { W, H, FONT, INK } from './config.js';
 import { load } from './save.js';
 import { audio } from './audio.js';
 
+// 그림의 긴 변이 size 가 되도록 크기 조절 (원화 해상도가 바뀌어도 화면 크기 유지)
+export const fit = (img, size) => img.setScale(size / Math.max(img.width, img.height));
 export const fmt = n => Math.floor(n).toLocaleString('en-US');
 
 export function txt(scene, x, y, s, size = 48, color = '#FFFFFF', o = {}) {

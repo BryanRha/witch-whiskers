@@ -1,8 +1,9 @@
 // 결과: 거리·점수(최고 기록) · 주운 재화 · 입양 진행 · 미션 진행 → 다시 날기 / 로비
 import { W, H } from '../config.js';
-import { txt, fmt, button, iconButton } from '../ui.js';
+import { txt, fmt, fit, button, iconButton } from '../ui.js';
 import { audio } from '../audio.js';
 import { load } from '../save.js';
+import { wind } from '../fx.js';
 import { applyRun, CAT_INFO, missions, ranking } from '../meta.js';
 
 export class ResultScene extends Phaser.Scene {
@@ -32,7 +33,7 @@ export class ResultScene extends Phaser.Scene {
       }
     }
     // 마녀 초상화 + 점수
-    this.add.image(W / 2 - 300, top + 300, `witch_${r.witch}_portrait`).setScale(0.55);
+    const pt = fit(this.add.image(W / 2 - 300, top + 300, `witch_${r.witch}_portrait`), 330); wind(pt, 1, 0.012); if (pt.preFX) pt.preFX.addShine(0.5, 0.25, 5);
     txt(this, W / 2 + 120, top + 190, '점수', 40, '#B8A6F0');
     const sc = txt(this, W / 2 + 120, top + 265, '0', 96, '#FFE14D');
     this.tweens.addCounter({ from: 0, to: r.score, duration: 900, ease: 'Cubic.easeOut', onUpdate: tw => sc.setText(fmt(tw.getValue())) });
@@ -56,7 +57,7 @@ export class ResultScene extends Phaser.Scene {
     const cat = out.pawCat || d.adopt;
     if (cat) {
       const have = d.paws[cat] || 0, need = CAT_INFO[cat].paws;
-      this.add.image(W / 2 - 330, y + 10, `cat_${cat}`).setScale(0.36);
+      wind(fit(this.add.image(W / 2 - 330, y + 10, `cat_${cat}`), 120), 2, 0.025);
       txt(this, W / 2 - 220, y - 20, `${CAT_INFO[cat].name} 입양까지`, 40, '#FFFFFF', { ox: 0 });
       this.add.rectangle(W / 2 - 220, y + 40, 520, 36, 0x120830).setOrigin(0, 0.5).setStrokeStyle(3, 0x8A6AD8);
       const bar = this.add.rectangle(W / 2 - 216, y + 40, 4, 28, 0xFF9EC4).setOrigin(0, 0.5);

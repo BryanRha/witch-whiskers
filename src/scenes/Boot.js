@@ -1,6 +1,7 @@
 // 로딩: manifest.json 에 적힌 그림·이펙트·효과음을 모두 받고 애니메이션을 만든다
 import { W, H } from '../config.js';
 import { SFX } from '../audio.js';
+import { makeTextures } from '../fx.js';
 
 export class BootScene extends Phaser.Scene {
   constructor() { super('Boot'); }
@@ -18,12 +19,11 @@ export class BootScene extends Phaser.Scene {
     });
   }
   create() {
+    makeTextures(this);
     const m = this.cache.json.get('manifest');
     for (const [n, s] of Object.entries(m.sheets)) this.anims.create({ key: n, frames: this.anims.generateFrameNumbers(n, { start: 0, end: s.frames - 1 }), frameRate: s.fps, repeat: n === 'sheet_dash' ? -1 : 0 });
     for (const k of ['bat', 'ghost', 'pumpkin', 'crow', 'golem', 'firebat', 'chest', 'eliteFire', 'eliteIce', 'eliteSteel', 'skull'])
-      this.anims.create({ key: `en_${k}`, frames: [{ key: `en_${k}_0` }, { key: `en_${k}_1` }], frameRate: k === 'golem' || k === 'chest' ? 4 : 8, repeat: -1 });
-    for (const w of ['luna', 'pia', 'ciel', 'volt'])
-      this.anims.create({ key: `fly_${w}`, frames: [0, 1, 2, 1].map(i => ({ key: `witch_${w}_${i}` })), frameRate: 10, repeat: -1 });
+      this.anims.create({ key: `en_${k}`, frames: this.textures.exists(`en_${k}_1`) ? [{ key: `en_${k}_0` }, { key: `en_${k}_1` }] : [{ key: `en_${k}_0` }], frameRate: k === 'golem' || k === 'chest' ? 4 : 8, repeat: -1 });
     this.scene.start(new URLSearchParams(location.search).has('play') ? 'Lobby' : 'Title');
   }
 }

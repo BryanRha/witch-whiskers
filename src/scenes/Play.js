@@ -2,9 +2,10 @@
 import { W, H } from '../config.js';
 import { Run, LANE_W, LANES, ITEM_TIME, ZONE_EVERY } from '../core/run.js';
 import { decideX } from '../core/ai.js';
-import { txt, fmt, iconButton, button, popup } from '../ui.js';
+import { txt, fmt, fit, iconButton, button, popup } from '../ui.js';
 import { audio } from '../audio.js';
 import { load, save } from '../save.js';
+import { wind, glow, tipOf, ELEMENT } from '../fx.js';
 import { ZONES, BOSS_NAME, ITEM_NAME, REVIVE_COST, BOOSTERS, pay } from '../meta.js';
 
 const DT = 1 / 60;
@@ -82,7 +83,11 @@ export class PlayScene extends Phaser.Scene {
   makePools() {
     const L = this.layer;
     this.pEnemy = new Pool(this, () => { const c = this.add.container(0, 0); const sp = this.add.sprite(0, 0, 'en_bat_0'); c.add(sp); c.sp = sp; L.enemies.add(c); return c; });
-    this.pShot = new Pool(this, () => { const i = this.add.image(0, 0, 'bolt_star').setBlendMode('ADD'); L.shots.add(i); return i; });
+    // 탄 = 빛망울(뒤) + 탄 그림(앞)
+    this.pShot = new Pool(this, () => { const c = this.add.container(0, 0); const g = this.add.image(0, -20, 'glow').setBlendMode('ADD').setScale(0.9, 1.4).setAlpha(0.7); const i = this.add.image(0, 0, 'bolt_star').setBlendMode('ADD'); c.add([g, i]); c.g = g; c.i = i; L.shots.add(c); return c; });
+    // 처치·획득 불꽃 입자 (한 개 이미터로 모두 처리)
+    this.burst = this.add.particles(0, 0, 'spark', { lifespan: { min: 350, max: 650 }, speed: { min: 180, max: 520 }, scale: { start: 0.55, end: 0 }, alpha: { start: 1, end: 0 }, rotate: { min: 0, max: 360 }, blendMode: 'ADD', emitting: false });
+    this.burst.setDepth(72);
     this.pDrop = new Pool(this, () => { const i = this.add.image(0, 0, 'cur_coin'); L.drops.add(i); return i; });
     this.pEb = new Pool(this, () => { const i = this.add.image(0, 0, 'eb_orb'); L.eb.add(i); return i; });
     this.pMeteor = new Pool(this, () => { const c = this.add.container(0, 0); const lane = this.add.rectangle(0, 0, LANE_W - 10, H * 2, 0xFF3B5B, 0.16).setOrigin(0.5, 0); const warn = this.add.image(0, 170, 'warn').setScale(0.9); const m = this.add.image(0, 0, 'meteor'); c.add([lane, warn, m]); c.lane = lane; c.warn = warn; c.m = m; L.eb.add(c); return c; });
@@ -92,15 +97,32 @@ export class PlayScene extends Phaser.Scene {
   }
 
   makePlayer(cats) {
-    const s = this.s, L = this.layer;
+    const s = this.s, L = this.layer, E = ELEMENT[s.element];
+    this.E = E;
     this.dashFx = this.add.sprite(0, 0, 'sheet_dash').setVisible(false).setScale(1.5).setBlendMode('ADD');
-    this.trail = this.add.particles(0, 0, 'cur_gem', { speedY: { min: 200, max: 360 }, speedX: { min: -40, max: 40 }, lifespan: 600, scale: { start: 0.2, end: 0 }, alpha: { start: 0.8, end: 0 }, frequency: 45, tint: [0xFFFFFF, 0xFFE8A8, 0xD8C2FF], blendMode: 'ADD' });
-    this.witch = this.add.sprite(0, 0, `witch_${s.witch}_0`).play(`fly_${s.witch}`).setScale(0.92);
+    // 빗자루 끝에서 흩날리는 마법 가루 (속성 색)
+    this.trail = this.add.particles(0, 0, E.tex, { speedY: { min: 260, max: 420 }, speedX: { min: -60, max: 60 }, lifespan: 700, scale: { start: 0.55, end: 0 }, alpha: { start: 0.9, end: 0 }, rotate: { min: 0, max: 360 }, frequency: 22, tint: E.tints, blendMode: 'ADD' });
+    // 몸 주위를 감도는 오라 입자
+    this.aura = this.add.particles(0, 0, E.tex, { x: { min: -90, max: 90 }, y: { min: -120, max: 120 }, speedY: { min: 40, max: 120 }, lifespan: 900, scale: { start: 0.35, end: 0 }, alpha: { start: 0.8, end: 0 }, frequency: 70, tint: E.tints, blendMode: 'ADD' });
+    this.backGlow = this.add.image(0, 0, 'glow').setScale(4.2, 5).setTint(E.color).setAlpha(0.28).setBlendMode('ADD');
+    const key = `witch_${s.witch}_0`;
+    this.witch = this.add.image(0, 0, key);
+    this.witch.setScale(420 / this.witch.height); this.witchScale = this.witch.scale;
+    this.tip = tipOf(this, key);
+    wind(this.witch, 0, 0.018);
+    glow(this.witch, E.glow, 3);
+    // 지팡이 끝 빛 (쏠 때마다 번쩍)
+    this.tipGlow = this.add.image(0, 0, 'glow').setTint(E.color).setBlendMode('ADD');
+    this.tipStar = this.add.image(0, 0, 'spark').setTint(0xFFFFFF).setBlendMode('ADD');
+    this.flash = 0;
     this.shieldImg = this.add.image(0, 0, 'shield').setScale(0.9).setAlpha(0.85).setVisible(false).setBlendMode('ADD');
-    this.catSprites = s.cats.map(c => this.add.image(0, 0, `cat_${c.id}`).setScale(0.38));
-    L.player.add([this.dashFx, this.trail, ...this.catSprites, this.witch, this.shieldImg]);
+    this.catSprites = s.cats.map(c => { const sp = fit(this.add.image(0, 0, `cat_${c.id}`), 140); sp.base = sp.scale; sp.jump = 0; wind(sp, 2, 0.03); return sp; });
+    this.catSparks = this.add.particles(0, 0, 'spark', { lifespan: 700, speed: { min: 20, max: 80 }, scale: { start: 0.3, end: 0 }, alpha: { start: 0.9, end: 0 }, tint: [0xFFE8F4, 0xFFF6A8, 0xD8C2FF], blendMode: 'ADD', emitting: false });
+    this.catCircles = s.cats.map(() => this.add.image(0, 0, 'circle').setScale(0.5).setAlpha(0).setTint(0xFF9EC4).setBlendMode('ADD'));
+    L.player.add([this.backGlow, this.dashFx, this.trail, this.aura, ...this.catCircles, ...this.catSprites, this.catSparks, this.witch, this.tipGlow, this.tipStar, this.shieldImg]);
     this.tilt = 0; this.lastX = s.player.x;
   }
+
 
   makeHud() {
     const s = this.s, D = 100;
@@ -132,7 +154,7 @@ export class PlayScene extends Phaser.Scene {
       this.pawHud = this.add.container(W - 120, H - 90).setDepth(D);
       const need = (load().paws[s.adoptTarget] || 0);
       this.pawBase = need;
-      this.pawHud.add([this.add.circle(0, 0, 54, 0x120830, 0.75), this.add.image(0, -6, `cat_${s.adoptTarget}`).setDisplaySize(96, 96), this.add.image(-40, 34, 'cur_paw').setDisplaySize(44, 44)]);
+      this.pawHud.add([this.add.circle(0, 0, 54, 0x120830, 0.75), fit(this.add.image(0, -6, `cat_${s.adoptTarget}`), 96), this.add.image(-40, 34, 'cur_paw').setDisplaySize(44, 44)]);
       this.pawTxt = txt(this, 14, 38, `${need}`, 32, '#FFE8A8');
       this.pawHud.add(this.pawTxt);
     }
@@ -188,19 +210,45 @@ export class PlayScene extends Phaser.Scene {
     const vx = (p.x - this.lastX) / Math.max(dt, 1e-3); this.lastX = p.x;
     this.tilt += (Phaser.Math.Clamp(vx * 0.012, -14, 14) - this.tilt) * Math.min(1, dt * 10);
     const bob = Math.sin(t * 3) * 6;
-    if (!this.over) this.witch.setPosition(p.x, p.y + 50 + bob).setAngle(this.tilt);
+    // 지팡이 끝이 탄 나가는 자리(p.x, p.y-70)에 오도록 그림 위치를 맞춤
+    const ws = this.witchScale, ww = this.witch.width * ws, wh = this.witch.height * ws;
+    const breath = Math.sin(t * 6) * 0.012;
+    if (!this.over) this.witch.setPosition(p.x - (this.tip.x - 0.5) * ww, p.y - 70 - (this.tip.y - 0.5) * wh + bob).setAngle(this.tilt).setScale(ws * (1 + breath), ws * (1 - breath));
     this.witch.setAlpha(p.inv > 0 && s.status === 'play' ? (Math.floor(t * 14) % 2 ? 0.4 : 1) : 1);
-    this.trail.setPosition(p.x, p.y + 150);
+    const wx = this.witch.x, wy = this.witch.y;
+    this.backGlow.setPosition(wx, wy).setAlpha(0.22 + Math.sin(t * 3) * 0.06).setVisible(!this.over);
+    this.trail.setPosition(wx, wy + wh * 0.42); this.trail.emitting = !this.over;
+    this.aura.setPosition(wx, wy); this.aura.emitting = !this.over;
+    this.flash = Math.max(0, this.flash - dt * 9);
+    const tx = p.x, ty = p.y - 70 + bob;
+    this.tipGlow.setPosition(tx, ty).setScale(0.9 + this.flash * 0.9 + Math.sin(t * 9) * 0.08).setAlpha(this.over ? 0 : 0.75 + this.flash * 0.25);
+    this.tipStar.setPosition(tx, ty).setScale(0.7 + this.flash * 0.8).setAngle(t * 120).setAlpha(this.over ? 0 : 1);
     this.shieldImg.setVisible(!!p.shield).setPosition(p.x, p.y + 20).setScale(0.9 + Math.sin(t * 5) * 0.03).setAngle(t * 30);
     this.dashFx.setPosition(p.x, p.y + 10);
-    s.cats.forEach((c, i) => { const sp = this.catSprites[i]; const lag = c.side * 120; sp.x += (Phaser.Math.Clamp(p.x + lag, 70, W - 70) - sp.x) * Math.min(1, dt * 9); sp.y = p.y + 70 + Math.sin(t * 4 + i * 2) * 10; sp.setFlipX(c.side > 0); });
+    s.cats.forEach((c, i) => {
+      const sp = this.catSprites[i];
+      sp.x += (Phaser.Math.Clamp(wx + c.side * (ww * 0.42 + 70), 70, W - 70) - sp.x) * Math.min(1, dt * 9);
+      sp.jump = Math.max(0, sp.jump - dt * 4);
+      const j = Math.sin(sp.jump * Math.PI);
+      sp.y = wy + wh * 0.18 + Math.sin(t * 4 + i * 2) * 10 - j * 26;
+      sp.setScale(sp.base * (1 + j * 0.08 + Math.sin(t * 5 + i) * 0.015), sp.base * (1 - j * 0.06 - Math.sin(t * 5 + i) * 0.015)).setFlipX(c.side > 0).setAngle(Math.sin(t * 2 + i) * 4 - c.side * j * 8);
+      const cc = this.catCircles[i]; cc.setPosition(sp.x, sp.y + 40).setAlpha(j * 0.8).setAngle(t * 90).setScale(0.45 + j * 0.2, (0.45 + j * 0.2) * 0.4);
+      sp.setVisible(!this.over || sp.alpha > 0);
+    });
 
     // 적
     this.pEnemy.begin();
     for (const e of s.enemies) {
       const c = this.pEnemy.get(e.id);
-      if (c._new) { c.sp.play(`en_${e.kind}`); c.sp.setScale(e.kind === 'skull' ? 0.8 : 1); c.sp.clearTint(); c.flash = 0; c.setAlpha(1); }
-      c.setPosition(e.x + Math.sin(t * 2 + e.wob) * 8, e.y);
+      if (c._new) {
+        c.sp.play(`en_${e.kind}`); c.base = (e.kind === 'skull' ? 0.8 : 1) * 220 / Math.max(c.sp.width, 190); c.sp.clearTint(); c.flash = 0; c.squash = 0; c.pop = 0; c.setAlpha(1);
+        if (c.sp.preFX) { c.sp.preFX.clear(); const g = { eliteFire: 0xFF5A2A, eliteIce: 0x7AD8FF, eliteSteel: 0xD8D8FF, chest: 0xFFD23F, firebat: 0xFF7A2A }[e.kind]; if (g) glow(c.sp, g, 4); }
+      }
+      // 등장 시 톡 튀어나오고, 맞으면 찌그러졌다 복원, 평소엔 날갯짓하듯 숨쉬기
+      c.pop = Math.min(1, c.pop + dt * 5); c.squash = Math.max(0, c.squash - dt * 8);
+      const flap = Math.sin(t * 10 + e.wob * 3) * 0.05, pop = Phaser.Math.Easing.Back.Out(c.pop);
+      c.sp.setScale(c.base * pop * (1 + flap - c.squash * 0.12), c.base * pop * (1 - flap * 0.6 + c.squash * 0.1)).setAngle(Math.sin(t * 2.5 + e.wob) * 5);
+      c.setPosition(e.x + Math.sin(t * 2 + e.wob) * 8, e.y + Math.sin(t * 3 + e.wob) * 6);
       if (c.flash > 0) { c.flash -= dt; if (c.flash <= 0) { c.sp.clearTint(); } }
       if (e.frozen > 0 && c.flash <= 0) c.sp.setTint(0x9AE8FF); else if (c.flash <= 0) c.sp.clearTint();
     }
@@ -208,9 +256,10 @@ export class PlayScene extends Phaser.Scene {
     // 내 탄
     this.pShot.begin();
     for (const b of s.bullets) {
-      const i = this.pShot.get(b.id);
-      if (i._new) { i.setTexture(SHOT_KEY[b.kind]); i.setScale(b.kind === 'furball' ? 0.75 : 1.15); i.setAngle(0); i.setBlendMode(b.kind === 'furball' ? 'NORMAL' : 'ADD'); }
-      i.setPosition(b.x, b.y);
+      const c = this.pShot.get(b.id), i = c.i;
+      if (c._new) { i.setTexture(SHOT_KEY[b.kind]); i.setScale(b.kind === 'furball' ? 0.75 : 1.15); i.setAngle(0); i.setBlendMode(b.kind === 'furball' ? 'NORMAL' : 'ADD'); c.g.setTint(b.kind === 'furball' ? 0xFF9EC4 : (ELEMENT_COLOR[b.kind] || 0xFFFFFF)); }
+      c.setPosition(b.x, b.y);
+      c.g.setScale(0.85 + Math.sin(t * 30 + b.id) * 0.1, 1.4);
       if (b.kind === 'furball') i.setAngle(Math.sin(t * 20 + b.id) * 12);
     }
     this.pShot.end();
@@ -255,10 +304,19 @@ export class PlayScene extends Phaser.Scene {
     if (s.boss) {
       const B = s.boss;
       if (!this.bossImg) {
-        this.bossImg = this.add.image(B.x, B.y, `boss_${B.type}`);
-        this.layer.enemies.add(this.bossImg);
+        this.bossImg = fit(this.add.image(B.x, B.y, `boss_${B.type}`), 540);
+        this.bossBase = this.bossImg.scale; this.bossRecoil = 0;
+        this.bossAura = this.add.image(B.x, B.y, 'glow').setScale(7).setTint(0xB84AFF).setAlpha(0.3).setBlendMode('ADD');
+        this.bossGlow = glow(this.bossImg, 0xB84AFF, 4);
+        this.layer.enemies.add([this.bossAura, this.bossImg]);
       }
-      this.bossImg.setPosition(B.x, B.y + Math.sin(t * 2) * 10).setVisible(B.state !== 'warn');
+      const ph2 = B.phase === 2;
+      this.bossRecoil = Math.max(0, this.bossRecoil - dt * 6);
+      const br = Math.sin(t * (ph2 ? 5 : 3)) * 0.025;
+      this.bossImg.setPosition(B.x + Math.sin(t * 13) * (ph2 ? 3 : 0), B.y + Math.sin(t * 2) * 10 - this.bossRecoil * 14).setVisible(B.state !== 'warn')
+        .setScale(this.bossBase * (1 + br - this.bossRecoil * 0.04), this.bossBase * (1 - br + this.bossRecoil * 0.03)).setAngle(Math.sin(t * 1.5) * 3);
+      this.bossAura.setPosition(this.bossImg.x, this.bossImg.y).setVisible(B.state !== 'warn').setTint(ph2 ? 0xFF3B5B : 0xB84AFF).setAlpha(0.25 + Math.sin(t * (ph2 ? 8 : 3)) * 0.1);
+      if (this.bossGlow) this.bossGlow.color = ph2 ? 0xFF3B5B : 0xB84AFF;
       if (this.bossFlash > 0) { this.bossFlash -= dt; if (this.bossFlash <= 0) this.bossImg.clearTint(); }
       if (B.state === 'fight' || B.state === 'enter') {
         this.bossBar.setVisible(true);
@@ -285,16 +343,18 @@ export class PlayScene extends Phaser.Scene {
   onEvent(e) {
     const s = this.s;
     switch (e.type) {
-      case 'shot': audio.play(`sfx_shot_${s.element}`, { volume: 0.18, gap: 110 }); break;
+      case 'shot': this.flash = 1; audio.play(`sfx_shot_${s.element}`, { volume: 0.18, gap: 110 }); break;
       case 'hit': {
         const c = this.pEnemy.live.get(e.id);
-        if (c) { c.sp.setTintFill(0xFFFFFF); c.flash = 0.05; }
+        if (c) { c.sp.setTintFill(0xFFFFFF); c.flash = 0.05; c.squash = 1; }
         this.fx('sheet_hit', e.x + Phaser.Math.Between(-20, 20), e.y + 50, 0.9, ELEMENT_COLOR[e.kind]);
         audio.play('sfx_hit', { volume: 0.22, gap: 70 });
         break;
       }
       case 'kill': {
         this.fx('sheet_poof', e.x, e.y, 1.1);
+        this.burst.setParticleTint(this.E.tints[Phaser.Math.Between(0, 2)]);
+        this.burst.emitParticleAt(e.x, e.y, e.close ? 14 : 8);
         audio.play(`sfx_kill_${Phaser.Math.Between(0, 2)}`, { volume: 0.4, gap: 40 });
         if (e.close) this.popText(e.x, e.y - 40, `+${fmt(e.pts)}`, '#FFE14D', 40);
         break;
@@ -302,7 +362,7 @@ export class PlayScene extends Phaser.Scene {
       case 'explode': this.fx('sheet_boom', e.x, e.y, 1.6); this.fx('sheet_ring', e.x, e.y, 2.2); this.shake(0.012, 260); audio.play('sfx_boom_small'); break;
       case 'splash': this.fx('sheet_boom', e.x, e.y, 0.5); break;
       case 'chain': this.lightning(e.from, e.to); break;
-      case 'catShot': break;
+      case 'catShot': { const i = this.s.cats.findIndex(c => c.side === e.side); const sp = this.catSprites[i]; if (sp) { sp.jump = 1; this.catSparks.emitParticleAt(sp.x, sp.y - 30, 6); } break; }
       case 'pick': this.onPick(e); break;
       case 'itemEnd': if (e.item === 'dash') { this.dashFx.setVisible(false).stop(); } break;
       case 'shield': audio.play('sfx_shield', { volume: 0.5 }); this.fx('sheet_ring', s.player.x, s.player.y, 1, 0x9AE8FF); break;
@@ -313,7 +373,7 @@ export class PlayScene extends Phaser.Scene {
       case 'zone': this.zoneChange(e.zone); break;
       case 'bossWarn': this.bossWarn(e.boss); break;
       case 'bossEnter': this.bossBar.setVisible(true); this.bossName.setText(BOSS_NAME[e.boss]); break;
-      case 'bossHit': if (this.bossImg) { this.bossImg.setTintFill(0xFFFFFF); this.bossFlash = 0.04; } this.fx('sheet_hit', e.x, e.y + 40, 1, ELEMENT_COLOR[e.kind]); audio.play('sfx_hit', { volume: 0.22, gap: 70 }); break;
+      case 'bossHit': if (this.bossImg) { this.bossImg.setTintFill(0xFFFFFF); this.bossFlash = 0.04; this.bossRecoil = Math.min(1, this.bossRecoil + 0.25); } this.fx('sheet_hit', e.x, e.y + 40, 1, ELEMENT_COLOR[e.kind]); audio.play('sfx_hit', { volume: 0.22, gap: 70 }); break;
       case 'bossPhase': this.shake(0.01, 400); this.popText(W / 2, 520, '분노!', '#FF6A8A', 90); break;
       case 'bossShot': case 'cannon': case 'mochi': case 'clone': break;
       case 'bossDash': this.popText(s.boss.x, s.boss.y + 200, '돌진!', '#FF6A8A', 64); break;
@@ -329,6 +389,8 @@ export class PlayScene extends Phaser.Scene {
     if (e.kind === 'coin') audio.play('sfx_coin', { volume: 0.3, gap: 55 });
     else if (e.kind === 'item') {
       this.items++;
+      this.burst.setParticleTint(0xFFE8A8); this.burst.emitParticleAt(s.player.x, s.player.y, 24);
+      this.tweens.add({ targets: this.backGlow, scaleX: 7, scaleY: 8, duration: 180, yoyo: true });
       audio.play('sfx_item');
       this.fx('sheet_ring', s.player.x, s.player.y, 1.2, 0xFFE8A8);
       this.popText(W / 2, H * 0.45, ITEM_NAME[e.item], '#FFE14D', 80, 900);
@@ -404,7 +466,7 @@ export class PlayScene extends Phaser.Scene {
   }
 
   bossEnd(e) {
-    if (this.bossImg) { this.bossImg.destroy(); this.bossImg = null; }
+    if (this.bossImg) { this.bossImg.destroy(); this.bossImg = null; this.bossAura.destroy(); }
     this.bossBar.setVisible(false);
     if (e.killed) {
       this.bossKills++;

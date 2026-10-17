@@ -1,10 +1,12 @@
 // 로비: 마녀 선택·강화 · 고양이(입양/성장/장착/산책) · 부스터 · 미션 · 출석 · 업적 · 주간 랭킹 · 상점 · 설정 → 출발
 import { W, H } from '../config.js';
-import { txt, fmt, button, iconButton, currencyBar, popup, toast, rewardText, scrollArea } from '../ui.js';
+import { txt, fmt, fit, button, iconButton, currencyBar, popup, toast, rewardText, scrollArea } from '../ui.js';
 import { audio } from '../audio.js';
 import { load, save, reset } from '../save.js';
 import { CATS } from '../core/run.js';
 import * as M from '../meta.js';
+import { wind, ELEMENT } from '../fx.js';
+import { WITCHES } from '../core/run.js';
 
 export class LobbyScene extends Phaser.Scene {
   constructor() { super('Lobby'); }
@@ -37,14 +39,22 @@ export class LobbyScene extends Phaser.Scene {
     this.stageY = cy;
     this.title = txt(this, W / 2, 210, '', 44, '#FFE8A8');
     this.name = txt(this, W / 2, 270, '', 80, '#FFFFFF');
-    this.glow = this.add.image(W / 2, cy + 40, 'sheet_ring', 0).setScale(1.8).setAlpha(0.35).setBlendMode('ADD');
-    this.witch = this.add.sprite(W / 2, cy, 'witch_luna_0');
+    // 뒤에서 천천히 도는 빛줄기 + 은은한 후광 + 속성 입자
+    this.rays = this.add.image(W / 2, cy - 20, 'rays').setScale(2.2).setAlpha(0.35).setBlendMode('ADD');
+    this.tweens.add({ targets: this.rays, angle: 360, duration: 40000, repeat: -1 });
+    this.glow = this.add.image(W / 2, cy - 20, 'glow').setScale(6).setAlpha(0.4).setBlendMode('ADD');
+    this.tweens.add({ targets: this.glow, alpha: 0.25, duration: 1800, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.stageFx = this.add.particles(W / 2, cy, 'spark', { x: { min: -330, max: 330 }, y: { min: -260, max: 260 }, speedY: { min: -60, max: -20 }, lifespan: 2200, scale: { start: 0.5, end: 0 }, alpha: { start: 0.9, end: 0 }, frequency: 90, blendMode: 'ADD' });
+    this.witch = this.add.sprite(W / 2, cy + 60, 'witch_luna_0');
+    wind(this.witch, 1, 0.012);
+    if (this.witch.preFX) this.shine = this.witch.preFX.addShine(0.5, 0.25, 5);
     this.lock = this.add.image(W / 2, cy, 'ico_lock').setScale(1.2).setVisible(false);
-    this.catL = this.add.image(W / 2 - 280, cy + 140, 'cat_cheese').setScale(0.46);
-    this.catR = this.add.image(W / 2 + 280, cy + 140, 'cat_cheese').setScale(0.46).setFlipX(true);
-    this.tweens.add({ targets: this.witch, y: cy - 24, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
+    this.catL = this.add.image(W / 2 - 290, cy + 140, 'cat_cheese');
+    this.catR = this.add.image(W / 2 + 290, cy + 140, 'cat_cheese').setFlipX(true);
+    this.tweens.add({ targets: this.witch, y: cy + 46, duration: 1400, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     this.tweens.add({ targets: [this.catL], y: cy + 120, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
     this.tweens.add({ targets: [this.catR], y: cy + 120, duration: 1100, yoyo: true, repeat: -1, ease: 'Sine.easeInOut', delay: 500 });
+    [this.catL, this.catR].forEach(c => wind(c, 2, 0.025));
     [this.catL, this.catR].forEach(c => c.setInteractive({ useHandCursor: true }).on('pointerup', () => this.catsPopup()));
     iconButton(this, 90, cy + 260, 'ico_back', () => this.switchWitch(-1), 110);
     iconButton(this, W - 90, cy + 260, 'ico_next', () => this.switchWitch(1), 110);
@@ -92,12 +102,15 @@ export class LobbyScene extends Phaser.Scene {
     this.bar.refresh();
     this.title.setText(info.title);
     this.name.setText(info.name);
-    this.witch.setTexture(`witch_${id}_portrait`).setScale(1.05).setTint(lv ? 0xFFFFFF : 0x2A2050);
+    this.witch.setTexture(`witch_${id}_portrait`).setTint(lv ? 0xFFFFFF : 0x2A2050);
     this.lock.setVisible(!lv);
-    this.glow.setTint(info.color);
+    this.glow.setTint(info.color); this.rays.setTint(info.color);
+    const E = ELEMENT[WITCHES[id].element];
+    this.stageFx.setParticleTint(E.tints[0]); this.stageFx.setTexture?.(E.tex);
     this.desc.setText(info.desc);
     const eq = d.equip;
-    [this.catL, this.catR].forEach((c, i) => { c.setVisible(!!eq[i]); if (eq[i]) c.setTexture(`cat_${eq[i]}`); });
+    [this.catL, this.catR].forEach((c, i) => { c.setVisible(!!eq[i]); if (eq[i]) fit(c.setTexture(`cat_${eq[i]}`), 190); });
+    fit(this.witch, 560);
     if (lv) {
       const atk = Math.round((1 + 0.12 * (lv - 1)) * 100);
       this.lvTxt.setText(`Lv.${lv}  공격 ${atk}%`);
@@ -123,7 +136,7 @@ export class LobbyScene extends Phaser.Scene {
     this.adoptBox.removeAll(true);
     if (d.adopt) {
       const have = d.paws[d.adopt] || 0, need = M.CAT_INFO[d.adopt].paws;
-      this.adoptBox.add(this.add.image(-380, 0, `cat_${d.adopt}`).setScale(0.3).setTint(have >= need ? 0xFFFFFF : 0x6A5A90));
+      this.adoptBox.add(fit(this.add.image(-380, 0, `cat_${d.adopt}`), 100).setTint(have >= need ? 0xFFFFFF : 0x6A5A90));
       this.adoptBox.add(txt(this, -300, -26, `입양 목표: ${M.CAT_INFO[d.adopt].name}`, 36, '#FFFFFF', { ox: 0 }));
       this.adoptBox.add(this.add.rectangle(-300, 22, 560, 30, 0x120830, 0.9).setOrigin(0, 0.5).setStrokeStyle(3, 0x8A6AD8));
       this.adoptBox.add(this.add.rectangle(-296, 22, Math.max(4, 552 * Math.min(1, have / need)), 22, 0xFF9EC4).setOrigin(0, 0.5));
@@ -180,7 +193,7 @@ export class LobbyScene extends Phaser.Scene {
     const wy = -ph / 2 + 150;
     if (d.walk.cat) {
       const left = M.walkLeft();
-      b.add(this.add.image(-360, wy, `cat_${d.walk.cat}`).setScale(0.25));
+      b.add(fit(this.add.image(-360, wy, `cat_${d.walk.cat}`), 80));
       b.add(txt(this, -280, wy - 20, `${M.CAT_INFO[d.walk.cat].name} 산책 중`, 38, '#FFFFFF', { ox: 0 }));
       const t = txt(this, -280, wy + 26, left ? `${Math.ceil(left / 60000)}분 남음` : '돌아왔어요!', 32, '#FFE8A8', { ox: 0 });
       b.add(t);
@@ -199,7 +212,7 @@ export class LobbyScene extends Phaser.Scene {
       const lv = d.cats[id] || 0, info = M.CAT_INFO[id], role = CATS[id].role;
       const eq = d.equip.includes(id), target = d.adopt === id;
       c.add(this.add.nineslice(0, 0, 'card', null, cw - 14, chh, 50, 50, 50, 50).setTint(eq ? 0xFFE8A8 : target ? 0xFFC0E0 : 0xFFFFFF));
-      c.add(this.add.image(0, -90, `cat_${id}`).setScale(0.62).setTint(lv ? 0xFFFFFF : 0x3A2E60));
+      c.add(fit(this.add.image(0, -90, `cat_${id}`), 210).setTint(lv ? 0xFFFFFF : 0x3A2E60));
       c.add(txt(this, 0, 30, info.name, 38, '#FFFFFF'));
       c.add(txt(this, 0, 72, `${M.ROLE_NAME[role]} · ${lv ? `Lv.${lv}` : `🐾 ${d.paws[id] || 0}/${info.paws}`}`, 28, lv ? '#FFE8A8' : '#D8CCFF'));
       if (eq) c.add(txt(this, -cw / 2 + 50, -chh / 2 + 34, '장착', 28, '#FFE14D'));
@@ -219,7 +232,7 @@ export class LobbyScene extends Phaser.Scene {
     const draw = () => {
       b.list.slice(4).forEach(o => o.destroy());
       const d = load(), lv = d.cats[id], cost = M.catUpCost(lv), role = CATS[id].role;
-      b.add(this.add.image(0, -280, `cat_${id}`).setScale(1));
+      b.add(fit(this.add.image(0, -280, `cat_${id}`), 330));
       b.add(txt(this, 0, -80, `Lv.${lv}  ·  ${M.ROLE_NAME[role]}`, 50, '#FFE8A8'));
       let eff = M.CAT_INFO[id].desc;
       if (role === 'attack') eff += `\n털뭉치 위력 ${Math.round((1.6 + lv * 0.12) * 100)}% · 간격 ${Math.max(0.55, 1 - lv * 0.02).toFixed(2)}초`;
@@ -312,7 +325,7 @@ export class LobbyScene extends Phaser.Scene {
       const y = i * 110 + 55;
       area.add(this.add.rectangle(0, y, 860, 100, r.me ? 0x6A3AC0 : 0x120830, r.me ? 0.9 : 0.6).setStrokeStyle(3, r.me ? 0xFFD95A : 0x4A3A80));
       area.add(txt(this, -380, y, `${i + 1}`, 48, i < 3 ? '#FFE14D' : '#FFFFFF'));
-      area.add(this.add.image(-270, y, r.w === 'rival' ? 'boss_rival' : `witch_${r.w}_portrait`).setDisplaySize(90, 90));
+      area.add(fit(this.add.image(-270, y, r.w === 'rival' ? 'boss_rival' : `witch_${r.w}_portrait`), 92));
       area.add(txt(this, -200, y, r.name, 42, '#FFFFFF', { ox: 0 }));
       area.add(txt(this, 400, y, fmt(r.score), 42, '#FFE8A8', { ox: 1 }));
     });
