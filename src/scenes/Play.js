@@ -12,6 +12,21 @@ const DT = 1 / 60;
 const SHOT_KEY = { star: 'bolt_star', fire: 'bolt_fire', ice: 'bolt_ice', bolt: 'bolt_bolt', furball: 'furball' };
 const DROP_KEY = { coin: 'cur_coin', gem: 'cur_gem', paw: 'cur_paw', treat: 'cur_treat', crystal: 'cur_crystal' };
 const EB_KEY = { skull: 'eb_skull', cannon: 'eb_cannon', moon: 'eb_moon', spark: 'eb_spark', star: 'eb_star', orb: 'eb_orb' };
+// 몬스터 종류별 움직임: f 진동수 · sx 가로 늘림(날갯짓) · sy 세로 · lag 위상차 · rot 흔들림 각도 · rf 흔들림 속도
+const MOTION = {
+  bat: { f: 14, sx: 0.09, sy: -0.04, lag: 0, rot: 6, rf: 2.5 },
+  firebat: { f: 16, sx: 0.1, sy: -0.05, lag: 0, rot: 7, rf: 3 },
+  crow: { f: 11, sx: 0.08, sy: -0.03, lag: 0, rot: 5, rf: 2 },
+  pumpkin: { f: 12, sx: 0.06, sy: -0.03, lag: 0, rot: 8, rf: 2.2 },
+  chest: { f: 13, sx: 0.07, sy: 0.04, lag: 1.6, rot: 4, rf: 3 },
+  ghost: { f: 3, sx: 0.06, sy: 0.08, lag: 1.6, rot: 9, rf: 1.4, alpha: true },
+  golem: { f: 2.2, sx: 0.03, sy: 0.04, lag: 3.1, rot: 2, rf: 1 },
+  skull: { f: 6, sx: 0.05, sy: 0.05, lag: 1.6, rot: 14, rf: 4 },
+  eliteFire: { f: 9, sx: 0.07, sy: 0.03, lag: 1.6, rot: 4, rf: 2 },
+  eliteIce: { f: 5, sx: 0.05, sy: 0.04, lag: 1.6, rot: 3, rf: 1.5 },
+  eliteSteel: { f: 10, sx: 0.07, sy: -0.03, lag: 0, rot: 3, rf: 1.8 },
+};
+const BACKLIGHT = { crow: [0x8A7AFF, 0.45], golem: [0x7AD8FF, 0.3], eliteSteel: [0xD8D8FF, 0.35], bat: [0xB89AFF, 0.18], skull: [0xC77AFF, 0.25] };
 const ELEMENT_COLOR = { star: 0xFFF2A0, fire: 0xFF9A4A, ice: 0x9AE8FF, bolt: 0xFFF04D, furball: 0xFFD6A0 };
 
 // id → 그림 연결 (매 프레임 살아 있는 것만 남기고 나머지는 숨겨서 재사용)
@@ -82,7 +97,7 @@ export class PlayScene extends Phaser.Scene {
 
   makePools() {
     const L = this.layer;
-    this.pEnemy = new Pool(this, () => { const c = this.add.container(0, 0); const sp = this.add.sprite(0, 0, 'en_bat_0'); c.add(sp); c.sp = sp; L.enemies.add(c); return c; });
+    this.pEnemy = new Pool(this, () => { const c = this.add.container(0, 0); const g = this.add.image(0, 0, 'glow').setScale(2.6).setBlendMode('ADD'); const sp = this.add.sprite(0, 0, 'en_bat_0'); c.add([g, sp]); c.sp = sp; c.g = g; L.enemies.add(c); return c; });
     // 탄 = 빛망울(뒤) + 탄 그림(앞)
     this.pShot = new Pool(this, () => { const c = this.add.container(0, 0); const g = this.add.image(0, -20, 'glow').setBlendMode('ADD').setScale(0.9, 1.4).setAlpha(0.7); const i = this.add.image(0, 0, 'bolt_star').setBlendMode('ADD'); c.add([g, i]); c.g = g; c.i = i; L.shots.add(c); return c; });
     // 처치·획득 불꽃 입자 (한 개 이미터로 모두 처리)
@@ -268,13 +283,17 @@ export class PlayScene extends Phaser.Scene {
     for (const e of s.enemies) {
       const c = this.pEnemy.get(e.id);
       if (c._new) {
-        c.sp.play(`en_${e.kind}`); c.base = (e.kind === 'skull' ? 0.8 : 1) * 220 / Math.max(c.sp.width, 190); c.sp.clearTint(); c.flash = 0; c.squash = 0; c.pop = 0; c.setAlpha(1);
+        c.sp.play(`en_${e.kind}`); c.base = (e.kind === 'skull' ? 0.8 : 1) * 245 / Math.max(c.sp.width, 190);
+        // 어두운 몬스터는 뒤에 빛을 깔아 밤 배경에서도 또렷하게
+        const bl = BACKLIGHT[e.kind]; c.g.setVisible(!!bl); if (bl) c.g.setTint(bl[0]).setAlpha(bl[1]); c.sp.clearTint(); c.flash = 0; c.squash = 0; c.pop = 0; c.setAlpha(1);
         if (c.sp.preFX) { c.sp.preFX.clear(); const g = { eliteFire: 0xFF5A2A, eliteIce: 0x7AD8FF, eliteSteel: 0xD8D8FF, chest: 0xFFD23F, firebat: 0xFF7A2A }[e.kind]; if (g) glow(c.sp, g, 4); }
       }
       // 등장 시 톡 튀어나오고, 맞으면 찌그러졌다 복원, 평소엔 날갯짓하듯 숨쉬기
       c.pop = Math.min(1, c.pop + dt * 5); c.squash = Math.max(0, c.squash - dt * 8);
-      const flap = Math.sin(t * 10 + e.wob * 3) * 0.05, pop = Phaser.Math.Easing.Back.Out(c.pop);
-      c.sp.setScale(c.base * pop * (1 + flap - c.squash * 0.12), c.base * pop * (1 - flap * 0.6 + c.squash * 0.1)).setAngle(Math.sin(t * 2.5 + e.wob) * 5);
+      const M = MOTION[e.kind] || MOTION.bat, ph = t * M.f + e.wob * 3, pop = Phaser.Math.Easing.Back.Out(c.pop);
+      const fx = Math.sin(ph) * M.sx, fy = Math.sin(ph + M.lag) * M.sy;
+      c.sp.setScale(c.base * pop * (1 + fx - c.squash * 0.12), c.base * pop * (1 + fy + c.squash * 0.1)).setAngle(Math.sin(t * M.rf + e.wob) * M.rot);
+      if (M.alpha) c.sp.setAlpha(0.82 + Math.sin(t * 3 + e.wob) * 0.15);
       c.setPosition(e.x + Math.sin(t * 2 + e.wob) * 8, e.y + Math.sin(t * 3 + e.wob) * 6);
       if (c.flash > 0) { c.flash -= dt; if (c.flash <= 0) { c.sp.clearTint(); } }
       if (e.frozen > 0 && c.flash <= 0) c.sp.setTint(0x9AE8FF); else if (c.flash <= 0) c.sp.clearTint();
@@ -333,7 +352,7 @@ export class PlayScene extends Phaser.Scene {
       if (!this.bossImg) {
         this.bossImg = fit(this.add.image(B.x, B.y, `boss_${B.type}`), 540);
         this.bossBase = this.bossImg.scale; this.bossRecoil = 0;
-        this.bossAura = this.add.image(B.x, B.y, 'glow').setScale(7).setTint(0xB84AFF).setAlpha(0.3).setBlendMode('ADD');
+        this.bossAura = this.add.image(B.x, B.y, 'glow').setScale(8).setTint(0xB84AFF).setAlpha(0.3).setBlendMode('ADD');
         this.bossGlow = glow(this.bossImg, 0xB84AFF, 4);
         this.layer.enemies.add([this.bossAura, this.bossImg]);
       }
