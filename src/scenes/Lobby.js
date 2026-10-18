@@ -86,6 +86,9 @@ export class LobbyScene extends Phaser.Scene {
     // 출발
     const sy = Math.max(by + 330, H - 190);
     this.bestTxt = txt(this, W / 2, sy - 120, '', 38, '#FFE8A8');
+    // 오늘의 미션 미리보기 (빈 공간 채우기, 누르면 미션 창)
+    const mTop = by + 220, mBot = sy - 170;
+    this.missionBox = mBot - mTop > 200 ? this.add.container(W / 2, (mTop + mBot) / 2) : null;
     this.startBtn = button(this, W / 2, sy, '출발!', () => this.start(), { key: 'btn_gold', w: 620, h: 190, size: 78 });
     this.tweens.add({ targets: this.startBtn, scale: 1.04, duration: 700, yoyo: true, repeat: -1, ease: 'Sine.easeInOut' });
 
@@ -149,6 +152,21 @@ export class LobbyScene extends Phaser.Scene {
       c.bg.setTint(on ? 0xFFE8A8 : 0xFFFFFF);
     }
     this.bestTxt.setText(d.best ? `최고 점수 ${fmt(d.best)} · ${fmt(d.bestDist)}m` : '손가락을 좌우로 밀어 마녀를 움직여요!');
+    if (this.missionBox) {
+      const mb = this.missionBox, list = M.missions();
+      mb.removeAll(true);
+      mb.add(this.add.nineslice(0, 0, 'panel', null, 980, 250, 70, 70, 70, 70));
+      mb.add(txt(this, -440, -86, '오늘의 미션', 36, '#FFE14D', { ox: 0 }));
+      mb.add(txt(this, 440, -86, `${list.filter(m => m.done).length}/${list.length} 완료`, 30, '#D8CCFF', { ox: 1 }));
+      list.slice(0, 3).forEach((m, i) => {
+        const y = -26 + i * 52, k = Math.min(1, m.prog / m.goal);
+        mb.add(txt(this, -440, y, `${m.done ? '✅' : '▫️'} ${m.text}`, 30, m.done ? '#9AF0B8' : '#FFFFFF', { ox: 0 }));
+        mb.add(this.add.rectangle(170, y, 240, 18, 0x120830, 0.9).setOrigin(0, 0.5).setStrokeStyle(2, 0x8A6AD8));
+        mb.add(this.add.rectangle(172, y, Math.max(3, 236 * k), 12, m.done ? 0x6EE7A8 : 0xFFC93C).setOrigin(0, 0.5));
+      });
+      mb.setSize(980, 250).setInteractive({ useHandCursor: true });
+      mb.off('pointerup').on('pointerup', () => this.missionsPopup());
+    }
     // 입양
     this.adoptBox.removeAll(true);
     if (d.adopt) {

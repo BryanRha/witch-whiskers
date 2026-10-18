@@ -1,5 +1,5 @@
 // 화면 크기: 가로 1080 고정, 세로는 기기 비율에 맞춰 늘어남 (최소 1920)
-export const VERSION = '1.5.1';
+export const VERSION = '1.6.0';
 export const W = 1080;
 export const BASE_H = 1920;
 export let H = BASE_H;
