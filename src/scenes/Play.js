@@ -5,7 +5,7 @@ import { decideX } from '../core/ai.js';
 import { txt, fmt, fit, iconButton, button, popup } from '../ui.js';
 import { audio } from '../audio.js';
 import { load, save } from '../save.js';
-import { wind, glow, tipOf, ELEMENT } from '../fx.js';
+import { wind, tipOf, ELEMENT } from '../fx.js';
 import { ZONES, BOSS_NAME, ITEM_NAME, REVIVE_COST, BOOSTERS, pay } from '../meta.js';
 
 const DT = 1 / 60;
@@ -99,7 +99,16 @@ export class PlayScene extends Phaser.Scene {
     const L = this.layer;
     this.pEnemy = new Pool(this, () => { const c = this.add.container(0, 0); const g = this.add.image(0, 0, 'glow').setScale(2.6).setBlendMode('ADD'); const sp = this.add.sprite(0, 0, 'en_bat_0'); c.add([g, sp]); c.sp = sp; c.g = g; L.enemies.add(c); return c; });
     // 탄 = 빛망울(뒤) + 탄 그림(앞)
-    this.pShot = new Pool(this, () => { const c = this.add.container(0, 0); const g = this.add.image(0, -20, 'glow').setBlendMode('ADD').setScale(0.9, 1.4).setAlpha(0.7); const i = this.add.image(0, 0, 'bolt_star').setBlendMode('ADD'); c.add([g, i]); c.g = g; c.i = i; L.shots.add(c); return c; });
+    this.pShot = new Pool(this, () => {
+      const c = this.add.container(0, 0);
+      const g = this.add.image(0, -20, 'glow').setBlendMode('ADD').setScale(0.9, 1.4).setAlpha(0.7);
+      const i = this.add.image(0, 0, 'bolt_star').setBlendMode('ADD');
+      const head = this.add.image(0, -40, 'spark').setBlendMode('ADD');
+      const o1 = this.add.image(0, 0, 'spark').setBlendMode('ADD').setScale(0.45), o2 = this.add.image(0, 0, 'spark').setBlendMode('ADD').setScale(0.45);
+      c.add([g, o1, o2, i, head]); Object.assign(c, { g, i, head, o1, o2 }); L.shots.add(c); return c;
+    });
+    // 마녀 레벨에 따른 마법탄 단계 (원작처럼 성장할수록 탄이 화려해짐): 1~4 · 5~9 · 10~19 · 20~29 · 30
+    this.tier = [5, 10, 20, 30].filter(v => this.s.level >= v).length;
     // 처치·획득 불꽃 입자 (한 개 이미터로 모두 처리)
     this.burst = this.add.particles(0, 0, 'spark', { lifespan: { min: 350, max: 650 }, speed: { min: 180, max: 520 }, scale: { start: 0.55, end: 0 }, alpha: { start: 1, end: 0 }, rotate: { min: 0, max: 360 }, blendMode: 'ADD', emitting: false });
     this.burst.setDepth(72);
@@ -126,7 +135,6 @@ export class PlayScene extends Phaser.Scene {
     this.witch.setScale(420 / this.witch.height); this.witchScale = this.witch.scale;
     this.tip = tipOf(this, key);
     wind(this.witch, 0, 0.018);
-    glow(this.witch, E.glow, 3);
     // 지팡이 끝 빛 (쏠 때마다 번쩍)
     this.tipGlow = this.add.image(0, 0, 'glow').setTint(E.color).setBlendMode('ADD');
     this.tipStar = this.add.image(0, 0, 'spark').setTint(0xFFFFFF).setBlendMode('ADD');
@@ -195,6 +203,20 @@ export class PlayScene extends Phaser.Scene {
     c.add([this.add.rectangle(0, -170, 860, 100, 0x120830, 0.8).setStrokeStyle(4, 0xFFD95A), txt(this, 0, -170, '누른 채 좌우로 밀어서 피하고 쏘세요!', 46, '#FFE8A8'), hand]);
     this.tweens.add({ targets: hand, x: { from: -220, to: 220 }, duration: 900, yoyo: true, repeat: 2, ease: 'Sine.easeInOut' });
     this.tweens.add({ targets: c, alpha: 0, delay: 5200, duration: 400, onComplete: () => c.destroy() });
+  }
+
+  // 처음 겪는 상황마다 한 번씩 짧은 안내 (별똥별은 잠깐 느리게 해서 피할 시간을 줌)
+  showTip(key, text, slow = false) {
+    const d = load();
+    if (this.bot || d.tips[key]) return;
+    d.tips[key] = 1; save();
+    const c = this.add.container(W / 2, 330).setDepth(97);
+    const t = txt(this, 0, 0, text, 44, '#FFFFFF', { wrap: 900 });
+    c.add([this.add.rectangle(0, 0, Math.min(1000, t.width + 80), t.height + 46, 0x120830, 0.88).setStrokeStyle(4, 0xFFD95A), t]);
+    c.setScale(0.6).setAlpha(0);
+    this.tweens.add({ targets: c, scale: 1, alpha: 1, duration: 220, ease: 'Back.easeOut' });
+    this.tweens.add({ targets: c, alpha: 0, delay: 2600, duration: 300, onComplete: () => c.destroy() });
+    if (slow) { this.slow = 0.35; this.time.delayedCall(900, () => { if (this.slow < 1) this.slow = 1; }); }
   }
 
   // ── 매 프레임 ───────────────────────────────────────────────
@@ -284,9 +306,9 @@ export class PlayScene extends Phaser.Scene {
       const c = this.pEnemy.get(e.id);
       if (c._new) {
         c.sp.play(`en_${e.kind}`); c.base = (e.kind === 'skull' ? 0.8 : 1) * 245 / Math.max(c.sp.width, 190);
+        const eg = { eliteFire: 0xFF5A2A, eliteIce: 0x7AD8FF, eliteSteel: 0xD8D8FF, chest: 0xFFD23F, firebat: 0xFF7A2A }[e.kind];
         // 어두운 몬스터는 뒤에 빛을 깔아 밤 배경에서도 또렷하게
-        const bl = BACKLIGHT[e.kind]; c.g.setVisible(!!bl); if (bl) c.g.setTint(bl[0]).setAlpha(bl[1]); c.sp.clearTint(); c.flash = 0; c.squash = 0; c.pop = 0; c.setAlpha(1);
-        if (c.sp.preFX) { c.sp.preFX.clear(); const g = { eliteFire: 0xFF5A2A, eliteIce: 0x7AD8FF, eliteSteel: 0xD8D8FF, chest: 0xFFD23F, firebat: 0xFF7A2A }[e.kind]; if (g) glow(c.sp, g, 4); }
+        const bl = BACKLIGHT[e.kind] || (eg && [eg, 0.55]); c.g.setVisible(!!bl); if (bl) c.g.setTint(bl[0]).setAlpha(bl[1]); c.sp.clearTint(); c.flash = 0; c.squash = 0; c.pop = 0; c.setAlpha(1);
       }
       // 등장 시 톡 튀어나오고, 맞으면 찌그러졌다 복원, 평소엔 날갯짓하듯 숨쉬기
       c.pop = Math.min(1, c.pop + dt * 5); c.squash = Math.max(0, c.squash - dt * 8);
@@ -302,10 +324,18 @@ export class PlayScene extends Phaser.Scene {
     // 내 탄
     this.pShot.begin();
     for (const b of s.bullets) {
-      const c = this.pShot.get(b.id), i = c.i;
-      if (c._new) { i.setTexture(SHOT_KEY[b.kind]); i.setScale(b.kind === 'furball' ? 0.75 : 1.15); i.setAngle(0); i.setBlendMode(b.kind === 'furball' ? 'NORMAL' : 'ADD'); c.g.setTint(b.kind === 'furball' ? 0xFF9EC4 : (ELEMENT_COLOR[b.kind] || 0xFFFFFF)); }
+      const c = this.pShot.get(b.id), i = c.i, fur = b.kind === 'furball', T = fur ? 0 : this.tier;
+      if (c._new) {
+        const col = fur ? 0xFF9EC4 : (ELEMENT_COLOR[b.kind] || 0xFFFFFF);
+        i.setTexture(SHOT_KEY[b.kind]); i.setScale(fur ? 0.75 : 1.1 + T * 0.14); i.setAngle(0); i.setBlendMode(fur ? 'NORMAL' : 'ADD');
+        c.g.setTint(col); c.head.setVisible(T >= 1).setTint(col); c.o1.setVisible(T >= 2).setTint(col); c.o2.setVisible(T >= 2).setTint(0xFFFFFF);
+      }
       c.setPosition(b.x, b.y);
-      c.g.setScale(0.85 + Math.sin(t * 30 + b.id) * 0.1, 1.4);
+      const gw = 0.85 + T * 0.22;
+      c.g.setScale(gw + Math.sin(t * 30 + b.id) * 0.1, 1.4 + T * 0.25).setAlpha(0.7 + T * 0.05);
+      if (T >= 1) c.head.setScale(0.5 + T * 0.12 + Math.sin(t * 40 + b.id) * 0.1).setAngle(t * 400);
+      if (T >= 2) { const a = t * 18 + b.id, r = 22 + T * 6; c.o1.setPosition(Math.sin(a) * r, Math.cos(a) * 18 + 10); c.o2.setPosition(-Math.sin(a) * r, -Math.cos(a) * 18 + 10); }
+      if (T >= 4) c.g.setTint(Phaser.Display.Color.HSVToRGB((t * 0.8 + b.id * 0.05) % 1, 0.5, 1).color);
       if (b.kind === 'furball') i.setAngle(Math.sin(t * 20 + b.id) * 12);
     }
     this.pShot.end();
@@ -353,7 +383,7 @@ export class PlayScene extends Phaser.Scene {
         this.bossImg = fit(this.add.image(B.x, B.y, `boss_${B.type}`), 540);
         this.bossBase = this.bossImg.scale; this.bossRecoil = 0;
         this.bossAura = this.add.image(B.x, B.y, 'glow').setScale(8).setTint(0xB84AFF).setAlpha(0.3).setBlendMode('ADD');
-        this.bossGlow = glow(this.bossImg, 0xB84AFF, 4);
+        this.bossGlow = null;
         this.layer.enemies.add([this.bossAura, this.bossImg]);
       }
       const ph2 = B.phase === 2;
@@ -382,6 +412,7 @@ export class PlayScene extends Phaser.Scene {
       c.setVisible(left > 0);
       if (left > 0) { c.ring.clear().lineStyle(8, 0xFFD95A).beginPath().arc(0, 0, 50, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * left / ITEM_TIME[k]).strokePath(); c.setAlpha(left < 1.5 ? (Math.floor(t * 8) % 2 ? 0.4 : 1) : 1); }
     }
+    if (s.enemies.length && s.enemies[0].y > s.player.y - 1000 && s.t > 1) this.showTip('row', '약한 몬스터 칸을 노려서 뚫고 지나가요!');
     if (!this.passedBest && s.dist > this.bestDist) { this.passedBest = true; this.showBanner('최고 기록 돌파!', '', 0xFFD95A); audio.play('sfx_mission'); }
   }
 
@@ -413,12 +444,12 @@ export class PlayScene extends Phaser.Scene {
       case 'itemEnd': if (e.item === 'dash') { this.dashFx.setVisible(false).stop(); } break;
       case 'shield': audio.play('sfx_shield', { volume: 0.5 }); this.fx('sheet_ring', s.player.x, s.player.y, 1, 0x9AE8FF); break;
       case 'shieldBreak': audio.play('sfx_shield_break'); this.fx('sheet_ring', s.player.x, s.player.y, 1.4, 0x9AE8FF); this.shake(0.01, 200); break;
-      case 'meteorWarn': audio.play('sfx_warn', { volume: 0.6 }); break;
+      case 'meteorWarn': audio.play('sfx_warn', { volume: 0.6 }); this.showTip('meteor', '⚠ 별똥별! 빨갛게 깜빡이는 칸에서 비켜요', true); break;
       case 'meteorFall': audio.play('sfx_meteor', { volume: 0.6, gap: 200 }); break;
       case 'meteorBreak': this.fx('sheet_boom', e.x, e.y, 1.2); audio.play('sfx_boom_small'); this.popText(e.x, e.y, '+500', '#FFE14D', 48); break;
       case 'zone': this.zoneChange(e.zone); break;
-      case 'bossWarn': this.bossWarn(e.boss); break;
-      case 'bossEnter': this.bossBar.setVisible(true); this.bossName.setText(BOSS_NAME[e.boss]); break;
+      case 'bossWarn': this.bossWarn(e.boss); this.time.delayedCall(3000, () => this.showTip('boss', '보스는 40초 안에! 빨리 물리칠수록 높은 랭크')); break;
+      case 'bossEnter': this.bossBar.setVisible(true); this.bossName.setText(`${BOSS_NAME[e.boss]}  Lv.${this.s.boss.lvl}`); break;
       case 'bossHit': if (this.bossImg) { this.bossImg.setTintFill(0xFFFFFF); this.bossFlash = 0.04; this.bossRecoil = Math.min(1, this.bossRecoil + 0.25); } this.fx('sheet_hit', e.x, e.y + 40, 1, ELEMENT_COLOR[e.kind]); audio.play('sfx_hit', { volume: 0.22, gap: 70 }); break;
       case 'bossPhase': this.shake(0.01, 400); this.popText(W / 2, 520, '분노!', '#FF6A8A', 90); break;
       case 'bossShot': case 'cannon': case 'mochi': case 'clone': break;
@@ -435,6 +466,7 @@ export class PlayScene extends Phaser.Scene {
     if (e.kind === 'coin') audio.play('sfx_coin', { volume: 0.3, gap: 55 });
     else if (e.kind === 'item') {
       this.items++;
+      this.showTip('item', '마법 아이템! 몇 초 동안 강해져요');
       this.burst.setParticleTint(0xFFE8A8); this.burst.emitParticleAt(s.player.x, s.player.y, 24);
       this.tweens.add({ targets: this.backGlow, scaleX: 7, scaleY: 8, duration: 180, yoyo: true });
       audio.play('sfx_item');
@@ -504,7 +536,8 @@ export class PlayScene extends Phaser.Scene {
     const red = this.add.rectangle(W / 2, H / 2, W, H, 0xC2264A, 0.0);
     const band = this.add.rectangle(W / 2, H * 0.36, W, 260, 0x12061E, 0.85).setStrokeStyle(8, 0xFF3B5B);
     const t1 = txt(this, W / 2, H * 0.36 - 30, 'WARNING', 120, '#FF5A7A', { stroke: '#12061E', thick: 16 });
-    const t2 = txt(this, W / 2, H * 0.36 + 70, `${BOSS_NAME[type]} 출현!`, 54, '#FFFFFF');
+    const bl = this.s.boss ? this.s.boss.lvl : 1;
+    const t2 = txt(this, W / 2, H * 0.36 + 70, `${bl > 3 ? '더 강해진 ' : ''}${BOSS_NAME[type]} 출현!`, 54, '#FFFFFF');
     c.add([red, band, t1, t2]);
     this.tweens.add({ targets: red, alpha: 0.28, duration: 300, yoyo: true, repeat: 4 });
     this.tweens.add({ targets: t1, scale: 1.08, duration: 300, yoyo: true, repeat: 4 });

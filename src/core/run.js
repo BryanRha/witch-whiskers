@@ -49,7 +49,7 @@ export class Run {
       status: 'play', revived: 0, nextId: 1, zone: 0,
       witch: opts.witch || 'luna', element: witch.element, passive: witch.passive,
       // 공격력: 레벨당 +12%, 발사 간격 0.125s → 레벨 30에서 0.09s
-      dmg: 1 + 0.12 * (wl - 1), fireGap: Math.max(0.09, 0.125 - 0.0012 * (wl - 1)), fireT: 0, shotCount: 0,
+      level: wl, dmg: 1 + 0.12 * (wl - 1), fireGap: Math.max(0.09, 0.125 - 0.0012 * (wl - 1)), fireT: 0, shotCount: 0,
       player: { x: W / 2, y: H - 470, tx: W / 2, r: 34, shield: (opts.boosters && opts.boosters.shield) ? 1 : 0, inv: 0 },
       items: { twin: 0, magnet: 0, star: 0, dash: (opts.boosters && opts.boosters.dash) ? 4 : 0 },
       cats: (opts.cats || []).filter(Boolean).map((c, i) => ({ ...c, ...CATS[c.id], side: i ? 1 : -1, t: 0, lv: c.level || 1 })),
@@ -63,7 +63,7 @@ export class Run {
 
   ev(type, data) { this.events.push({ type, ...data }); }
   id() { return this.s.nextId++; }
-  base() { return 1 + this.s.dist / 350; }                      // 적 기본 체력
+  base() { return 1 + this.s.dist / 380; }                      // 적 기본 체력
   laneX(l) { return LANE_W * (l + 0.5); }
 
   // 손가락으로 지정한 목표 x (화면 쪽에서 매 프레임 갱신)

@@ -12,7 +12,7 @@ function fresh() {
     totals: { runs: 0, dist: 0, kills: 0, bosses: 0, coins: 0, sRank: 0, items: 0 },
     missions: { date: '', list: [] }, daily: { last: '', streak: 0 }, ach: {},
     walk: { cat: null, until: 0 },
-    sfx: true, music: true, tutorial: false, createdAt: Date.now(),
+    sfx: true, music: true, tutorial: false, tips: {}, createdAt: Date.now(),
   };
 }
 

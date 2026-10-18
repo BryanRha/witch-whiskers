@@ -29,7 +29,6 @@ export class TitleScene extends Phaser.Scene {
     this.tweens.add({ targets: rays, angle: 360, duration: 50000, repeat: -1 });
     const hero = fit(this.add.image(W * 0.6, H - 20, `witch_${d.witch}_portrait`), Math.min(900, H * 0.48)).setOrigin(0.5, 1);
     wind(hero, 1, 0.012);
-    if (hero.preFX) hero.preFX.addShine(0.4, 0.2, 4);
     const owned = Object.keys(d.cats);
     const c1 = fit(this.add.image(W * 0.16, H - 150, `cat_${owned[0] || 'cheese'}`), 300);
     wind(c1, 2, 0.025);

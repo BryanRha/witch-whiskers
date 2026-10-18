@@ -10,6 +10,9 @@ export const WITCH_INFO = {
 };
 export const WITCH_ORDER = ['luna', 'pia', 'ciel', 'volt'];
 export const WITCH_MAX = 30;
+// 마법탄 단계 (마녀 레벨 5·10·20·30 에서 진화)
+export const SHOT_TIERS = [5, 10, 20, 30];
+export const shotTier = lv => SHOT_TIERS.filter(v => lv >= v).length + 1;
 export const witchUpCost = lv => Math.round(300 * Math.pow(1.19, lv - 1) / 10) * 10;
 
 export const CAT_INFO = {

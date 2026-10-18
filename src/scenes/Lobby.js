@@ -130,7 +130,7 @@ export class LobbyScene extends Phaser.Scene {
     fit(this.witch, 560);
     if (lv) {
       const atk = Math.round((1 + 0.12 * (lv - 1)) * 100);
-      this.lvTxt.setText(`Lv.${lv}  공격 ${atk}%`);
+      this.lvTxt.setText(`Lv.${lv}  공격 ${atk}%\n마법탄 ${M.shotTier(lv)}단계`).setLineSpacing(-4).setFontSize(44);
       if (lv >= M.WITCH_MAX) { this.upBtn.setLabel('최대 레벨'); this.upBtn.setEnabled(false); }
       else { this.upBtn.setLabel(`강화 ${fmt(M.witchUpCost(lv))}`); this.upBtn.setEnabled(d.coins >= M.witchUpCost(lv)); }
       this.upBtn.list[1].setTexture('cur_coin');
@@ -181,8 +181,15 @@ export class LobbyScene extends Phaser.Scene {
     if (!d.witches[id]) {
       if (M.unlockWitch(id)) { audio.play('sfx_upgrade'); toast(this, `${M.WITCH_INFO[id].name} 해금!`, '#FFE14D'); this.burst(); }
       else toast(this, '재화가 부족해요');
-    } else if (M.upgradeWitch(id)) { audio.play('sfx_upgrade'); this.burst(); }
-    else toast(this, '코인이 부족해요');
+    } else {
+      const before = M.shotTier(d.witches[id]);
+      if (!M.upgradeWitch(id)) toast(this, '코인이 부족해요');
+      else {
+        audio.play('sfx_upgrade'); this.burst();
+        const now = M.shotTier(d.witches[id]);
+        if (now > before) { audio.play('sfx_boss_clear', { volume: 0.5 }); toast(this, `마법탄 ${now}단계로 진화!`, '#FFE14D'); }
+      }
+    }
     this.refresh();
   }
 

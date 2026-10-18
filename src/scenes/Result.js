@@ -33,7 +33,7 @@ export class ResultScene extends Phaser.Scene {
       }
     }
     // 마녀 초상화 + 점수
-    const pt = fit(this.add.image(W / 2 - 300, top + 300, `witch_${r.witch}_portrait`), 330); wind(pt, 1, 0.012); if (pt.preFX) pt.preFX.addShine(0.5, 0.25, 5);
+    const pt = fit(this.add.image(W / 2 - 300, top + 300, `witch_${r.witch}_portrait`), 330); wind(pt, 1, 0.012);
     txt(this, W / 2 + 120, top + 190, '점수', 40, '#B8A6F0');
     const sc = txt(this, W / 2 + 120, top + 265, '0', 96, '#FFE14D');
     this.tweens.addCounter({ from: 0, to: r.score, duration: 900, ease: 'Cubic.easeOut', onUpdate: tw => sc.setText(fmt(tw.getValue())) });
