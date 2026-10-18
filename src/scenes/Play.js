@@ -87,8 +87,8 @@ export class PlayScene extends Phaser.Scene {
     this.bgA.setTexture(`bg_${this.s.zone % 5}`);
     this.bgB = this.add.tileSprite(W / 2, H / 2, W, H, 'bg_1').setDepth(1).setAlpha(0);
     // 배경은 살짝 어둡게 눌러서 적·탄이 또렷하게 보이도록
-    this.shade = this.add.rectangle(W / 2, H / 2, W, H, 0x0E0830, 0.42).setDepth(1.5);
-    this.clouds = this.add.tileSprite(W / 2, H / 2, W, H, 'bg_cloudlayer').setDepth(2).setAlpha(0.22);
+    this.shade = this.add.rectangle(W / 2, H / 2, W, H, 0x0E0830, 0.25).setDepth(1.5);
+    this.clouds = this.add.tileSprite(W / 2, H / 2, W, H, 'bg_cloudlayer').setDepth(2).setAlpha(0.12);
     this.speedLines = this.add.particles(0, 0, 'bolt_star', {
       x: { min: 0, max: W }, y: -100, speedY: { min: 2600, max: 3600 }, lifespan: 900, scaleX: 0.12, scaleY: { min: 0.8, max: 1.4 },
       alpha: { start: 0.55, end: 0 }, frequency: 25, quantity: 2, emitting: false, blendMode: 'ADD', tint: 0xFFE6A8,
@@ -343,9 +343,9 @@ export class PlayScene extends Phaser.Scene {
     this.pDrop.begin();
     for (const d of s.drops) {
       const i = this.pDrop.get(d.id);
-      if (i._new) { i.setTexture(d.kind === 'item' ? `item_${d.item}` : DROP_KEY[d.kind]); i.setScale(d.kind === 'item' ? 0.9 : d.kind === 'coin' ? 0.75 : 0.9); }
+      if (i._new) { i.setTexture(d.kind === 'item' ? `item_${d.item}` : DROP_KEY[d.kind]); fit(i, d.kind === 'item' ? 112 : d.kind === 'coin' ? 50 : 60); i.baseScale = i.scaleY; }
       i.setPosition(d.x, d.y);
-      if (d.kind === 'coin') i.scaleX = 0.75 * Math.abs(Math.cos(t * 6 + d.id));
+      if (d.kind === 'coin') i.scaleX = i.baseScale * Math.abs(Math.cos(t * 6 + d.id));
       if (d.kind === 'item') i.setAngle(Math.sin(t * 4) * 10);
     }
     this.pDrop.end();
@@ -365,7 +365,7 @@ export class PlayScene extends Phaser.Scene {
       c.setPosition(m.x, 0);
       const warn = m.warn > 0;
       c.lane.setVisible(warn).setAlpha(0.1 + 0.12 * (Math.floor(t * 8) % 2));
-      c.warn.setVisible(warn).setScale(0.85 + 0.1 * Math.sin(t * 20));
+      c.warn.setVisible(warn).setScale((130 / c.warn.width) * (0.9 + 0.1 * Math.sin(t * 20)));
       c.m.setVisible(!warn).setPosition(0, m.y).setScale(m.big ? 1.25 : 0.95).setTint(m.big ? 0xFFC0A0 : 0xFFFFFF);
     }
     this.pMeteor.end();

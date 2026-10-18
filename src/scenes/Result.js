@@ -14,7 +14,7 @@ export class ResultScene extends Phaser.Scene {
     const before = load().best;
     const out = applyRun(r);
     const d = load();
-    const bg = this.add.image(W / 2, H, 'title_bg').setOrigin(0.5, 1);
+    const bg = this.add.image(W / 2, H, 'title_art').setOrigin(0.5, 1);
     bg.setScale(Math.max(W / bg.width, H / bg.height));
     this.add.rectangle(W / 2, H / 2, W, H, 0x0A0618, 0.45);
     this.cameras.main.fadeIn(300, 10, 6, 30);
