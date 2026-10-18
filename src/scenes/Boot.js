@@ -8,7 +8,7 @@ export class BootScene extends Phaser.Scene {
   preload() {
     const bar = this.add.rectangle(W / 2 - 300, H / 2 + 120, 4, 26, 0xFFD95A).setOrigin(0, 0.5);
     this.add.rectangle(W / 2, H / 2 + 120, 608, 34).setStrokeStyle(4, 0xB89AFF);
-    this.add.text(W / 2, H / 2, '냥냥 마녀', { fontFamily: 'Jua', fontSize: '96px', color: '#FFE8A8' }).setOrigin(0.5);
+    this.add.text(W / 2, H / 2, '고양이와 마녀', { fontFamily: 'Jua', fontSize: '96px', color: '#FFE8A8' }).setOrigin(0.5);
     this.load.on('progress', v => { bar.width = 600 * v; });
     this.load.json('manifest', 'assets/manifest.json');
     this.load.once('filecomplete-json-manifest', (k, t, m) => {

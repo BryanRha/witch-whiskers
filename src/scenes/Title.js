@@ -28,7 +28,7 @@ export class TitleScene extends Phaser.Scene {
     const tap = txt(this, W / 2, H * 0.92, '화면을 터치하세요', 60, '#FFE8A8');
     this.tweens.add({ targets: tap, alpha: 0.25, duration: 800, yoyo: true, repeat: -1 });
     txt(this, W - 30, H - 40, `v${VERSION}`, 30, '#B8A6F0', { ox: 1 });
-    txt(this, 30, H - 40, '© Witch & Whiskers', 30, '#B8A6F0', { ox: 0 });
+    txt(this, 30, H - 40, '© Cat & Witch', 30, '#B8A6F0', { ox: 0 });
 
     audio.music('bgm_title', this);
     audio.prefetch(this, ['bgm_lobby', 'bgm_run', 'bgm_boss']);
