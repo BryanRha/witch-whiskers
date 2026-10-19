@@ -626,13 +626,13 @@ export class PlayScene extends Phaser.Scene {
   pause() {
     if (this.paused || this.over) return;
     this.paused = true;
-    this.tweens.pauseAll(); this.anims.pauseAll();
+    this.frozen = this.tweens.getTweens().filter(t => t.isPlaying()); this.frozen.forEach(t => t.pause()); this.anims.pauseAll();
     audio.duck(0.12);
     const pop = popup(this, '잠시 멈춤', 820, { closable: false, depth: 2000 });
     const b = pop.box;
-    const resume = () => { pop.close(); this.time.delayedCall(160, () => { this.paused = false; this.tweens.resumeAll(); this.anims.resumeAll(); audio.duck(0.38); }); };
+    const resume = () => { pop.close(); this.time.delayedCall(160, () => { this.paused = false; (this.frozen || []).forEach(t => t.resume()); this.frozen = null; this.anims.resumeAll(); audio.duck(0.38); }); };
     b.add(button(this, 0, -130, '계속하기', resume, { key: 'btn_gold', w: 520, h: 150 }));
-    b.add(button(this, 0, 40, '로비로', () => { pop.close(); this.paused = false; this.tweens.resumeAll(); this.anims.resumeAll(); this.s.status = 'dead'; this.finish(); }, { key: 'btn_purple', w: 440, h: 120 }));
+    b.add(button(this, 0, 40, '로비로', () => { pop.close(); this.paused = false; (this.frozen || []).forEach(t => t.resume()); this.frozen = null; this.anims.resumeAll(); this.s.status = 'dead'; this.finish(); }, { key: 'btn_purple', w: 440, h: 120 }));
     const d = load();
     const sfx = button(this, -130, 200, '', () => { audio.toggleSfx(); sfxIc.setTexture(d.sfx ? 'ico_sound' : 'ico_sound_off'); }, { key: 'btn_icon', w: 150, h: 150 });
     const sfxIc = this.add.image(-130, 194, d.sfx ? 'ico_sound' : 'ico_sound_off').setDisplaySize(96, 96);
